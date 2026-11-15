@@ -5,6 +5,7 @@ import { DEFAULT_SETTINGS, MODULE_KEYS, MODULES, TIMEZONES, type OrgDto } from "
 import * as s from "../db/schema";
 import { AppError, audit, parse, requireSuperadmin, superFingerprint, type AppEnv, type Ctx, type OrgRow } from "../lib/context";
 import { randomString, sha256 } from "../lib/crypto";
+import { seedRoomsSample } from "../lib/seed";
 import { now } from "../lib/time";
 import { createUser, listAudit, listUsers, resetPassword, updateUser } from "../lib/users";
 import { activeKeyFilter } from "./auth";
@@ -83,6 +84,15 @@ admin.post("/orgs", async (c) => {
       await db.insert(s.orgModules).values({ orgId, moduleKey: key, status: "active" }).run();
     }
     await audit(c, orgId, "org.create", `${body.name}, batas ${body.maxUsers} user`);
+    if (body.modules.includes("rooms")) {
+      // Data contoh hanya pelengkap: kalau gagal, PT tetap terdaftar.
+      try {
+        await seedRoomsSample(c, orgId, created.user.id, body.timezone);
+        await audit(c, orgId, "org.seed", "Data contoh Booking Ruangan: 3 ruangan, 2 booking");
+      } catch (err) {
+        console.error("Gagal membuat data contoh", err);
+      }
+    }
     return c.json({ org: toOrgDto(await getOrg(c, orgId), 1), admin: created.user, tempPassword: created.tempPassword }, 201);
   } catch (err) {
     // Admin pertama gagal dibuat (misalnya email sudah terpakai): batalkan PT-nya.

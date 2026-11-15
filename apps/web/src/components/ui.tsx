@@ -26,9 +26,13 @@ export function useAction() {
 
 export type Mode = "simple" | "advanced";
 
-/** Tab Simple/Advanced. Pilihan terakhir diingat per user di perangkat ini. */
-export function useMode(userId: string): [Mode, (m: Mode) => void] {
-  const key = `mode:${userId}`;
+/**
+ * Tab Simple/Advanced milik satu bagian. Tiap bagian menyimpan pilihannya sendiri,
+ * jadi mengganti tab di satu bagian tidak mengubah bagian lain. Pilihan terakhir
+ * diingat per user dan per bagian di perangkat ini.
+ */
+export function useMode(userId: string, section: string): [Mode, (m: Mode) => void] {
+  const key = `mode:${userId}:${section}`;
   const [mode, setMode] = useState<Mode>(() => {
     try {
       return localStorage.getItem(key) === "advanced" ? "advanced" : "simple";

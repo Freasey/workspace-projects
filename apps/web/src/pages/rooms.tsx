@@ -327,7 +327,7 @@ function Timeline({ rooms, weekday, bookings, meId, nowMin, closureOf, onPick, o
 
 function BookingDialog(props: { draft: Draft; rooms: RoomDto[]; settings: RoomSettings; onClose: () => void; onDone: (b: BookingDto) => Promise<void> }) {
   const me = useUser();
-  const [mode, setMode] = useMode(me.user.id);
+  const [mode, setMode] = useMode(me.user.id, "booking-form");
   const [d, setD] = useState(props.draft);
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");

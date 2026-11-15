@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { api, useAuth } from "../api";
 import { Brand, ErrorNote, useAction } from "../components/ui";
 
@@ -7,7 +8,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="auth">
       <div className="auth-brand">
-        <Brand />
+        <Link to="/" className="brand-link" aria-label="Ke halaman utama"><Brand /></Link>
         <div>
           <h2>Aplikasi kantor untuk internal PT Anda.</h2>
           <p>Booking ruangan tanpa bentrok, dengan jadwal dan aturan yang ditetapkan admin PT Anda sendiri.</p>

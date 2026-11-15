@@ -6,7 +6,9 @@ import { Brand } from "./components/ui";
 import { AdminAudit, AdminKey, AdminOrgDetail, AdminOrgs } from "./pages/admin";
 import { AuthLayout, ChangePassword, Login } from "./pages/auth";
 import { Home, OrgUsers } from "./pages/home";
+import { Landing } from "./pages/landing";
 import { MyBookings, RoomsBooking } from "./pages/rooms";
+import { RoomsHelp } from "./pages/roomsHelp";
 import { RoomsManage } from "./pages/roomsManage";
 
 export function App() {
@@ -39,7 +41,12 @@ export function App() {
 
   return (
     <AuthContext.Provider value={{ me, refresh, logout }}>
-      {!me ? <Login /> : me.kind === "superadmin" ? <AdminApp email={me.email} /> : <UserApp me={me} />}
+      <Routes>
+        {/* Halaman utama adalah landing page publik. Form masuk ada di /login. */}
+        <Route path="/" element={<Landing />} />
+        <Route path="/login" element={me ? <Navigate to={me.kind === "superadmin" ? "/admin" : "/rooms"} replace /> : <Login />} />
+        <Route path="*" element={!me ? <Navigate to="/login" replace /> : me.kind === "superadmin" ? <AdminApp email={me.email} /> : <UserApp me={me} />} />
+      </Routes>
     </AuthContext.Provider>
   );
 }
@@ -143,8 +150,9 @@ function UserApp({ me }: { me: Extract<Me, { kind: "user" }> }) {
     nav.push({ to: "/rooms", label: "Jadwal", sub: true });
     nav.push({ to: "/rooms/mine", label: "Booking saya", sub: true });
     if (isAdmin) nav.push({ to: "/rooms/manage", label: "Kelola ruangan", sub: true });
+    nav.push({ to: "/rooms/help", label: "Bantuan", sub: true });
   } else if (rooms) {
-    nav.push({ to: "/", label: rooms.name, badge: <span className="badge warn">Dijeda</span> });
+    nav.push({ to: "/app", label: rooms.name, badge: <span className="badge warn">Dijeda</span> });
   }
   if (isAdmin) nav.push({ group: "Kelola PT" }, { to: "/users", label: "Pengguna" });
   if (!me.impersonated) nav.push({ group: "Akun" }, { to: "/password", label: "Ganti password" });
@@ -152,14 +160,15 @@ function UserApp({ me }: { me: Extract<Me, { kind: "user" }> }) {
   return (
     <Shell context={me.org.name} who={me.user.name} role={isAdmin ? "Admin PT" : "User"} nav={nav} banner={banner}>
       <Routes>
-        {/* Jadwal adalah halaman awal selama modul Booking Ruangan aktif. */}
-        <Route path="/" element={roomsOn ? <Navigate to="/rooms" replace /> : <Home />} />
+        {/* Jadwal adalah halaman awal aplikasi selama modul Booking Ruangan aktif. */}
+        <Route path="/app" element={roomsOn ? <Navigate to="/rooms" replace /> : <Home />} />
         {roomsOn && <Route path="/rooms" element={<RoomsBooking />} />}
         {roomsOn && <Route path="/rooms/mine" element={<MyBookings />} />}
         {roomsOn && isAdmin && <Route path="/rooms/manage" element={<RoomsManage />} />}
+        {roomsOn && <Route path="/rooms/help" element={<RoomsHelp />} />}
         {isAdmin && <Route path="/users" element={<OrgUsers />} />}
         {!me.impersonated && <Route path="/password" element={<ChangePassword />} />}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to={roomsOn ? "/rooms" : "/app"} replace />} />
       </Routes>
     </Shell>
   );
