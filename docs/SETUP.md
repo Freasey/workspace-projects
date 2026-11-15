@@ -36,13 +36,9 @@ Saat mengubah tampilan, `pnpm dev:web` memberi muat ulang otomatis di `http://lo
 
 Backend dan frontend ter-deploy sebagai **satu Worker**. Cukup satu deployment, dengan root folder di akar repo.
 
-### 1. Buat database produksi
+### 1. Database produksi
 
-```bash
-npx wrangler d1 create workspace-prod
-```
-
-Salin `database_id` dari hasilnya ke `wrangler.jsonc`, menggantikan `GANTI_DENGAN_ID_DATABASE_PRODUKSI`. ID ini bukan rahasia dan boleh di-commit.
+Database D1 produksi sudah dibuat dan ID-nya sudah terpasang di `wrangler.jsonc` (bagian `env.production`). ID ini bukan rahasia.
 
 ### 2. Hubungkan repo ke Cloudflare
 
@@ -61,6 +57,8 @@ Matikan build untuk branch selain produksi, supaya `dev` dan `main` tidak ikut t
 Deploy command di atas menerapkan migrasi database sebelum deploy. Kalau token build Cloudflare tidak punya izin D1, jalankan migrasi dari komputer sendiri dengan `pnpm db:migrate:prod` dan pakai `npx wrangler deploy --env production` saja sebagai deploy command.
 
 ### 3. Isi kredensial super admin
+
+Di Cloudflare tidak ada file `.env` di server. Padanannya adalah **Variables and Secrets** milik Worker; di komputer sendiri padanannya file `.dev.vars`.
 
 Di dashboard: Worker `workspace-app` → Settings → Variables and Secrets. Tambahkan dua nilai dengan tipe **Secret**:
 

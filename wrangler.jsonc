@@ -30,7 +30,7 @@
         {
           "binding": "DB",
           "database_name": "workspace-prod",
-          "database_id": "GANTI_DENGAN_ID_DATABASE_PRODUKSI",
+          "database_id": "e50510a0-b8e3-4ef1-b40d-52e1cd1a3fad",
           "migrations_dir": "apps/api/migrations"
         }
       ]
