@@ -46,7 +46,7 @@ Di dashboard Cloudflare: Workers & Pages → Create → Import a repository.
 
 | Isian | Nilai |
 |---|---|
-| Nama Worker | `workspace-app` (harus sama dengan `name` di bagian `env.production` pada `wrangler.jsonc`) |
+| Nama Worker | `workspace-projects` (harus sama dengan `name` di bagian `env.production` pada `wrangler.jsonc`) |
 | Branch produksi | `prod` |
 | Root directory | kosong (akar repo) |
 | Build command | `pnpm build` |
@@ -60,7 +60,7 @@ Deploy command di atas menerapkan migrasi database sebelum deploy. Kalau token b
 
 Di Cloudflare tidak ada file `.env` di server. Padanannya adalah **Variables and Secrets** milik Worker; di komputer sendiri padanannya file `.dev.vars`.
 
-Di dashboard: Worker `workspace-app` → Settings → Variables and Secrets. Tambahkan dua nilai dengan tipe **Secret**:
+Di dashboard: Worker `workspace-projects` → Settings → Variables and Secrets. Tambahkan dua nilai dengan tipe **Secret**:
 
 - `SUPERADMIN_EMAIL`
 - `SUPERADMIN_PASSWORD`

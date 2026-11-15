@@ -4,6 +4,8 @@
   "name": "workspace-app-dev",
   "main": "apps/api/src/index.ts",
   "compatibility_date": "2025-09-01",
+  // Variabel yang diisi lewat dashboard Cloudflare tidak dihapus saat deploy.
+  "keep_vars": true,
   "assets": {
     "directory": "apps/web/dist",
     "not_found_handling": "single-page-application",
@@ -20,7 +22,7 @@
   "env": {
     // Produksi: deploy dengan `wrangler deploy --env production` dari branch prod.
     "production": {
-      "name": "workspace-app",
+      "name": "workspace-projects",
       "assets": {
         "directory": "apps/web/dist",
         "not_found_handling": "single-page-application",
