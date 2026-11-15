@@ -1,0 +1,3 @@
+# Salin ke .dev.vars untuk development lokal. Jangan commit .dev.vars.
+SUPERADMIN_EMAIL=admin@example.com
+SUPERADMIN_PASSWORD=ganti-password-ini

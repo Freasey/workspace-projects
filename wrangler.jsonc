@@ -1,0 +1,39 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Konfigurasi tingkat atas dipakai untuk development lokal (branch dev, tidak live).
+  "name": "workspace-app-dev",
+  "main": "apps/api/src/index.ts",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "apps/web/dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "workspace-dev",
+      "database_id": "57005d5e-a8ac-4fbb-972a-a075ac7e913c",
+      "migrations_dir": "apps/api/migrations"
+    }
+  ],
+  "env": {
+    // Produksi: deploy dengan `wrangler deploy --env production` dari branch prod.
+    "production": {
+      "name": "workspace-app",
+      "assets": {
+        "directory": "apps/web/dist",
+        "not_found_handling": "single-page-application",
+        "run_worker_first": ["/api/*"]
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "workspace-prod",
+          "database_id": "GANTI_DENGAN_ID_DATABASE_PRODUKSI",
+          "migrations_dir": "apps/api/migrations"
+        }
+      ]
+    }
+  }
+}
