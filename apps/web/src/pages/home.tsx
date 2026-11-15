@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import type { AuditDto, UserDto } from "@app/shared";
 import { api, fmtDateTime, msg, useUser } from "../api";
 import { ErrorNote, Section } from "../components/ui";
 import { UserManager } from "../components/UserManager";
 
-const MODULE_PATH: Record<string, string> = { rooms: "/rooms" };
-
+/** Ditampilkan hanya saat tidak ada modul yang bisa dibuka: belum diberikan, atau sedang dijeda. */
 export function Home() {
   const me = useUser();
   return (
@@ -19,25 +17,19 @@ export function Home() {
       </div>
       {me.modules.length === 0 && <div className="card muted">Belum ada modul yang diaktifkan untuk perusahaan Anda.</div>}
       <div className="grid">
-        {me.modules.map((m) =>
-          m.status === "active" ? (
-            <Link key={m.key} to={MODULE_PATH[m.key] ?? "/"} className="module">
-              <div className="card">
-                <div className="spread"><h2 style={{ margin: 0 }}>{m.name}</h2><span className="badge ok">Aktif</span></div>
-                <p className="muted" style={{ margin: "8px 0 0" }}>{m.description}</p>
+        {me.modules.map((m) => (
+          <div key={m.key} className="module paused">
+            <div className="card">
+              <div className="spread">
+                <h2 style={{ margin: 0 }}>{m.name}</h2>
+                <span className={`badge ${m.status === "active" ? "ok" : "warn"}`}>{m.status === "active" ? "Aktif" : "Dijeda"}</span>
               </div>
-            </Link>
-          ) : (
-            <div key={m.key} className="module paused" aria-disabled="true">
-              <div className="card">
-                <div className="spread"><h2 style={{ margin: 0 }}>{m.name}</h2><span className="badge warn">Dijeda</span></div>
-                <p className="muted" style={{ margin: "8px 0 0" }}>
-                  {m.pausedNote || "Modul ini sedang dijeda dan tidak bisa dibuka. Data Anda aman. Hubungi pengelola sistem."}
-                </p>
-              </div>
+              <p className="muted" style={{ margin: "8px 0 0" }}>
+                {m.status === "active" ? m.description : m.pausedNote || "Modul ini sedang dijeda dan tidak bisa dibuka. Data Anda aman. Hubungi pengelola sistem."}
+              </p>
             </div>
-          ),
-        )}
+          </div>
+        ))}
       </div>
     </>
   );
@@ -85,7 +77,7 @@ export function OrgUsers() {
 
   return (
     <>
-      <div className="page-head"><h1>User</h1></div>
+      <div className="page-head"><h1>Pengguna</h1></div>
       <ErrorNote error={error} />
       {data && <UserManager base="/org" users={data.users} maxUsers={data.maxUsers} canResetAdmins={false} onChanged={load} />}
       <Section title="Log aktivitas"><AuditTable logs={logs} /></Section>

@@ -145,3 +145,10 @@ Menunggu persetujuan → Terkonfirmasi → Check-in → Selesai, dengan cabang D
 ## 10. Ide modul berikutnya
 
 Peminjaman aset, booking kendaraan operasional, manajemen tamu, hot desk dan parkir, tiket fasilitas, pesanan konsumsi rapat, permintaan ATK, paket masuk. Aset, kendaraan, dan tamu memakai ulang mesin booking yang sama.
+
+## 11. Tampilan
+
+- Halaman masuk: panel merek di kiri, form di kanan. Tidak ada reset password lewat email; halaman hanya menjelaskan siapa yang bisa mereset.
+- Setelah masuk: bar atas, sidebar modul yang selalu terlihat, area kerja di kanan. Di layar sempit sidebar menjadi baris menu di atas.
+- Halaman awal modul Booking Ruangan adalah Jadwal: timeline dengan ruangan ke bawah dan jam ke samping, slot 15 menit. Booking dibuat dengan klik atau seret di area kosong. Di layar sempit timeline diganti daftar per ruangan.
+- Modul yang dijeda tetap tampil di sidebar dengan label "Dijeda".
