@@ -24,6 +24,13 @@ export interface ApiError {
   error: { code: string; message: string };
 }
 
+/** Respons login. `token` hanya dikirim untuk klien mobile; web memakai cookie. */
+export interface LoginResult {
+  ok: true;
+  token?: string;
+  expiresAt?: number;
+}
+
 export interface OrgModule {
   key: ModuleKey;
   name: string;

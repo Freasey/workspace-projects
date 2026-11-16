@@ -69,6 +69,12 @@ Jangan simpan nilai ini di repo. Mengubahnya membuat semua sesi super admin dan 
 
 Tanpa dua nilai ini, login super admin dan kunci sekali pakai tidak aktif.
 
+## Aplikasi mobile
+
+Aplikasi Android/iOS ada di `apps/mobile` dan punya dependensi sendiri (npm, di luar workspace pnpm). Cara menjalankan dan membuat APK ada di [`apps/mobile/README.md`](../apps/mobile/README.md).
+
+Aplikasi mobile butuh server yang sudah memuat perubahan login mobile (`client: "mobile"` di `POST /api/v1/auth/login`). Deploy API lebih dulu sebelum membagikan APK.
+
 ## Mengubah skema database
 
 Tambah file baru di `apps/api/migrations` dengan nomor urut berikutnya, lalu samakan `apps/api/src/db/schema.ts`. File migrasi yang sudah diterapkan tidak boleh diubah.

@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { deleteCookie, setCookie } from "hono/cookie";
 import { and, eq, gt, isNull, ne } from "drizzle-orm";
 import { z } from "zod";
-import { MODULES, type Me, type OrgModule } from "@app/shared";
+import { MODULES, type LoginResult, type Me, type OrgModule } from "@app/shared";
 import * as s from "../db/schema";
 import { AppError, audit, parse, requireLogin, SESSION_COOKIE, superFingerprint, type AppEnv, type Ctx } from "../lib/context";
 import { hashPassword, randomToken, safeEqual, sha256, verifyPassword } from "../lib/crypto";
@@ -40,13 +40,19 @@ async function recordFailure(c: Ctx, key: string) {
   }
 }
 
-async function startSession(c: Ctx, kind: keyof typeof TTL, userId: string | null, fingerprint: string | null) {
+/**
+ * Membuat sesi. Web menerima cookie; aplikasi mobile menerima token di badan
+ * respons dan mengirimnya kembali lewat header `Authorization: Bearer`.
+ */
+async function startSession(c: Ctx, client: "web" | "mobile", kind: keyof typeof TTL, userId: string | null, fingerprint: string | null) {
   const token = randomToken();
+  const expiresAt = now() + TTL[kind];
   await c
     .get("db")
     .insert(s.sessions)
-    .values({ idHash: await sha256(token), kind, userId, fingerprint, expiresAt: now() + TTL[kind], createdAt: now() })
+    .values({ idHash: await sha256(token), kind, userId, fingerprint, expiresAt, createdAt: now() })
     .run();
+  if (client === "mobile") return c.json<LoginResult>({ ok: true, token, expiresAt });
   setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "Lax",
@@ -54,12 +60,13 @@ async function startSession(c: Ctx, kind: keyof typeof TTL, userId: string | nul
     path: "/",
     maxAge: TTL[kind],
   });
+  return c.json<LoginResult>({ ok: true });
 }
 
 export const auth = new Hono<AppEnv>();
 
 auth.post("/login", async (c) => {
-  const body = await parse(c, z.object({ email: z.string().min(1).max(200), password: z.string().min(1).max(200) }));
+  const body = await parse(c, z.object({ email: z.string().min(1).max(200), password: z.string().min(1).max(200), client: z.enum(["web", "mobile"]).default("web") }));
   const db = c.get("db");
   const email = body.email.trim().toLowerCase();
   const lockKey = `${email}|${c.req.header("cf-connecting-ip") ?? "local"}`;
@@ -74,8 +81,7 @@ auth.post("/login", async (c) => {
       throw BAD_LOGIN();
     }
     await db.delete(s.loginAttempts).where(eq(s.loginAttempts.key, lockKey)).run();
-    await startSession(c, "superadmin", null, fingerprint);
-    return c.json({ ok: true });
+    return startSession(c, body.client, "superadmin", null, fingerprint);
   }
 
   const user = await db.select().from(s.users).where(eq(s.users.email, email)).get();
@@ -90,8 +96,7 @@ auth.post("/login", async (c) => {
       throw new AppError(401, "TEMP_PASSWORD_EXPIRED", "Password sementara sudah kedaluwarsa. Minta admin untuk mereset.");
     }
     await db.delete(s.loginAttempts).where(eq(s.loginAttempts.key, lockKey)).run();
-    await startSession(c, "user", user.id, null);
-    return c.json({ ok: true });
+    return startSession(c, body.client, "user", user.id, null);
   }
 
   // Kunci sekali pakai: universal, tapi diklaim secara atomik sehingga hanya
@@ -106,7 +111,7 @@ auth.post("/login", async (c) => {
       .run();
     if (claimed.meta.changes === 1) {
       await db.delete(s.loginAttempts).where(eq(s.loginAttempts.key, lockKey)).run();
-      await startSession(c, "impersonation", user.id, null);
+      const res = await startSession(c, body.client, "impersonation", user.id, null);
       await db
         .insert(s.auditLogs)
         .values({
@@ -119,7 +124,7 @@ auth.post("/login", async (c) => {
           createdAt: t,
         })
         .run();
-      return c.json({ ok: true });
+      return res;
     }
   }
 
