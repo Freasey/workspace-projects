@@ -7,7 +7,9 @@ Dokumen ini mencatat keputusan alur yang sudah disepakati. Kode mengikuti dokume
 - Satu instalasi melayani banyak PT. Tiap PT memakai aplikasi untuk internalnya sendiri.
 - Operator (super admin) mendaftarkan PT, menentukan modul yang didapat, dan bisa menjeda modul.
 - Aplikasi terdiri dari banyak modul. Modul pertama adalah Booking Ruangan.
-- Saat ini hanya versi web. Mobile menyusul dan cukup memakai API yang sama.
+- Tersedia versi web dan aplikasi mobile (React Native). Android lebih dulu, iOS menyusul dari kode yang sama. Mobile memakai API yang sama.
+- Aplikasi mobile untuk pemakaian sehari-hari: jadwal, booking, booking saya, ganti password. Pengaturan (kelola ruangan, pengguna) dan panel super admin tetap di web.
+- Web login dengan cookie; mobile dengan token yang dikirim lewat header `Authorization: Bearer` dan disimpan di penyimpanan terenkripsi perangkat.
 
 ## 2. Stack
 
@@ -17,6 +19,7 @@ Dokumen ini mencatat keputusan alur yang sudah disepakati. Kode mengikuti dokume
 | Database | Cloudflare D1 (SQLite) + Drizzle |
 | File | Cloudflare R2 (menyusul, untuk foto ruangan) |
 | Web | React + Vite + TypeScript |
+| Mobile | React Native (Expo) + TypeScript |
 | Deploy | Satu Worker: `/api/*` ke API, sisanya file statis web |
 
 Batasan tahap gratis yang memengaruhi desain:
