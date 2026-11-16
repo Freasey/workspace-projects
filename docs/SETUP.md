@@ -73,7 +73,7 @@ Tanpa dua nilai ini, login super admin dan kunci sekali pakai tidak aktif.
 
 Aplikasi Android/iOS ada di `apps/mobile` dan punya dependensi sendiri (npm, di luar workspace pnpm). Cara menjalankan dan membuat APK ada di [`apps/mobile/README.md`](../apps/mobile/README.md).
 
-Aplikasi mobile butuh server yang sudah memuat perubahan login mobile (`client: "mobile"` di `POST /api/v1/auth/login`). Deploy API lebih dulu sebelum membagikan APK.
+Aplikasi mobile terhubung ke `https://spaces.worksell.id` dan butuh server yang sudah memuat login mobile (`client: "mobile"` di `POST /api/v1/auth/login`). APK-nya ikut ter-deploy bersama web di `/download/spaces-android.apk`, jadi server dan APK selalu naik bersamaan.
 
 ## Mengubah skema database
 

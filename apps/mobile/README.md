@@ -6,7 +6,7 @@ Aplikasi mobile Spaces untuk Android (iOS menyusul dari kode yang sama). React N
 
 | Layar | Isi |
 |---|---|
-| Masuk | Email, password, alamat server. Ganti password sementara diwajibkan saat login pertama. |
+| Masuk | Email dan password. Ganti password sementara diwajibkan saat login pertama. |
 | Jadwal | Jadwal per hari untuk semua ruangan, garis waktu terisi, buat booking, lihat detail, batalkan. |
 | Booking saya | Booking mendatang dan riwayat 30 hari. |
 | Akun | Profil, ganti password, keluar. |
@@ -33,6 +33,12 @@ Tipe dan konstanta diambil dari `packages/shared` (alias `@app/shared`, diatur d
 
 Folder `android/` dan `ios/` tidak disimpan di repo. Keduanya dibuat ulang dari `app.json` oleh `expo prebuild`; jangan diubah dengan tangan.
 
+## Server
+
+Alamat server tertanam di aplikasi: `https://spaces.worksell.id` (lihat `src/api.ts`). User tidak perlu mengetik alamat apa pun.
+
+Untuk development, timpa dengan variabel `EXPO_PUBLIC_API_URL` saat menjalankan atau build.
+
 ## Menjalankan saat development
 
 Butuh Node.js 20 ke atas. Untuk Android: JDK 17 dan Android SDK (`ANDROID_HOME`).
@@ -45,32 +51,48 @@ cd apps/mobile
 npm install
 ```
 
-Jalankan API lokal dari akar repo (`pnpm dev`), lalu:
+Jalankan API lokal dari akar repo (`pnpm dev`), lalu dari emulator Android (komputer sendiri beralamat `10.0.2.2`):
 
 ```bash
-npm run android
+EXPO_PUBLIC_API_URL=http://10.0.2.2:8787 npm run android
 ```
 
-Di layar masuk, isi alamat server. Dari emulator Android, komputer sendiri beralamat `http://10.0.2.2:8787`. Dari ponsel sungguhan, pakai alamat IP komputer di jaringan yang sama.
+## Merilis APK baru
 
-## Alamat server
+APK dibagikan langsung dari situs, di `https://spaces.worksell.id/download/spaces-android.apk`, dengan tombol unduh di halaman utama.
 
-Alamat server bawaan ditanam saat build lewat variabel `EXPO_PUBLIC_API_URL`. Kalau diisi, user tidak perlu mengetik alamat server; kalau kosong, layar masuk memintanya.
+1. Naikkan `version` dan `android.versionCode` di `app.json`. `versionCode` wajib lebih besar dari rilis sebelumnya, kalau tidak ponsel menolak memasang pembaruan.
+2. Siapkan keystore rilis (lihat bagian berikut), lalu build:
 
-## Membuat APK
+   ```bash
+   npm run apk
+   ```
+
+3. Salin `android/app/build/outputs/apk/release/app-release.apk` ke `apps/web/public/download/spaces-android.apk`.
+4. Perbarui `apps/web/src/release.ts` (versi, ukuran, tanggal).
+5. Commit, lalu deploy seperti biasa (branch `prod`).
+
+APK hanya berisi arsitektur `arm64-v8a`, yang dipakai hampir semua ponsel Android sejak 2017. Alasannya, Cloudflare membatasi file statis maksimal 25 MiB; APK dengan arsitektur 32-bit ikut berukuran sekitar 32 MB.
+
+## Keystore rilis
+
+Build rilis ditandatangani dengan keystore Spaces lewat plugin `plugins/withReleaseSigning.js`. Keystore dan password-nya **tidak** disimpan di repo; plugin membacanya dari variabel lingkungan:
 
 ```bash
-EXPO_PUBLIC_API_URL=https://alamat-produksi-anda npm run apk
+export SPACES_UPLOAD_STORE_FILE=/path/absolut/ke/spaces-upload.jks
+export SPACES_UPLOAD_STORE_PASSWORD='...'
+export SPACES_UPLOAD_KEY_ALIAS=spaces
+export SPACES_UPLOAD_KEY_PASSWORD='...'
 ```
 
-Hasilnya di `android/app/build/outputs/apk/release/app-release.apk`.
+Tanpa variabel ini, build jatuh ke kunci debug. Hasilnya hanya untuk uji dan tidak bisa memperbarui aplikasi yang sudah terpasang di ponsel user.
 
-Catatan:
+**Jangan sampai keystore hilang.** Android hanya mau memasang pembaruan yang ditandatangani kunci yang sama. Kalau keystore hilang, semua user harus uninstall lalu install ulang. Keystore yang sama juga dipakai kalau nanti aplikasi masuk Google Play.
 
-- APK hasil perintah di atas ditandatangani dengan kunci debug bawaan. Cukup untuk dipasang langsung dan diuji, tetapi **tidak bisa** diunggah ke Play Store. Untuk rilis, buat keystore sendiri dan simpan di luar repo (lihat dokumentasi Expo tentang app signing), atau pakai EAS Build.
-- Build rilis hanya mengizinkan HTTPS. Alamat `http://` hanya jalan di build debug.
-- Nama paket `com.freasey.spaces` ada di `app.json`. Tentukan nama paket final sebelum rilis pertama ke Play Store, karena setelah itu tidak bisa diganti.
-- Setiap rilis baru: naikkan `version` dan `android.versionCode` di `app.json`.
+Catatan lain:
+
+- Build rilis hanya bisa terhubung lewat HTTPS.
+- Nama paket `com.freasey.spaces` ada di `app.json` dan tidak bisa diganti setelah aplikasi masuk Google Play.
 
 ## iOS
 

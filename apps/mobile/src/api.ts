@@ -3,13 +3,14 @@ import type { LoginResult, Me } from "@app/shared";
 import { storage } from "./storage";
 
 const TOKEN_KEY = "session_token";
-const SERVER_KEY = "server_url";
 
-/** Alamat server bawaan, ditanam saat build lewat EXPO_PUBLIC_API_URL. */
-export const DEFAULT_SERVER = (process.env.EXPO_PUBLIC_API_URL ?? "").replace(/\/+$/, "");
+/**
+ * Alamat server tertanam di aplikasi. Untuk development, timpa saat build/start
+ * dengan EXPO_PUBLIC_API_URL (misalnya http://10.0.2.2:8787 dari emulator).
+ */
+export const SERVER = (process.env.EXPO_PUBLIC_API_URL || "https://spaces.worksell.id").replace(/\/+$/, "");
 
 let token: string | null = null;
-let server = DEFAULT_SERVER;
 let onAuthChanged: () => void = () => undefined;
 
 export class ApiErr extends Error {
@@ -25,24 +26,11 @@ export class ApiErr extends Error {
 /** Kode yang berarti keadaan login berubah di tengah pemakaian. */
 const STATE_CODES = ["UNAUTHORIZED", "ORG_SUSPENDED", "MUST_CHANGE_PASSWORD", "MODULE_PAUSED", "MODULE_NOT_GRANTED"];
 
-export function normalizeServer(input: string): string {
-  const v = input.trim().replace(/\/+$/, "");
-  if (!v) return "";
-  return /^https?:\/\//i.test(v) ? v : `https://${v}`;
-}
-
 export const session = {
   async restore(): Promise<void> {
     token = await storage.get(TOKEN_KEY);
-    server = (await storage.get(SERVER_KEY)) ?? DEFAULT_SERVER;
   },
   hasToken: () => token !== null,
-  server: () => server,
-  async setServer(url: string): Promise<void> {
-    server = normalizeServer(url);
-    if (server === DEFAULT_SERVER) await storage.remove(SERVER_KEY);
-    else await storage.set(SERVER_KEY, server);
-  },
   async login(email: string, password: string): Promise<void> {
     const res = await api<LoginResult>("POST", "/auth/login", { email, password, client: "mobile" });
     if (!res.token) throw new ApiErr(500, "NO_TOKEN", "Server belum mendukung aplikasi mobile. Perbarui server lebih dulu.");
@@ -67,7 +55,7 @@ export async function api<T = unknown>(method: "GET" | "POST" | "PUT" | "PATCH" 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 20_000);
   try {
-    res = await fetch(`${server}/api/v1${path}`, {
+    res = await fetch(`${SERVER}/api/v1${path}`, {
       method,
       headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
       body: method === "GET" ? undefined : JSON.stringify(body ?? {}),

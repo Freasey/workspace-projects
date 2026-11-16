@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ScrollView, View } from "react-native";
 import appConfig from "../../app.json";
-import { session, useAuth, useUser } from "../api";
+import { SERVER, useAuth, useUser } from "../api";
 import { useTheme } from "../theme";
 import { Badge, Button, Card, DetailRow, Txt } from "../ui";
 import { ChangePasswordCard } from "./Auth";
@@ -86,7 +86,7 @@ export function Account() {
         }}
       />
       <Txt variant="small" muted style={{ textAlign: "center", marginTop: 8 }}>
-        Spaces {appConfig.expo.version} · {session.server().replace(/^https?:\/\//, "")}
+        Spaces {appConfig.expo.version} · {SERVER.replace(/^https?:\/\//, "")}
       </Txt>
     </ScrollView>
   );

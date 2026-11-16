@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { api, DEFAULT_SERVER, normalizeServer, session, useAuth } from "../api";
+import { api, session, useAuth } from "../api";
 import { useTheme } from "../theme";
 import { Brand, Button, Card, ErrorNote, Field, Input, Notice, PasswordInput, Txt, useAction } from "../ui";
 
@@ -39,19 +39,11 @@ export function Login() {
   const { refresh } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [server, setServer] = useState(session.server());
-  // Alamat server hanya ditampilkan kalau belum ada, atau kalau diminta.
-  const [showServer, setShowServer] = useState(!session.server());
   const { busy, error, run, setError } = useAction();
 
   const submit = () => {
     if (!email.trim() || !password) return setError("Isi email dan password.");
-    if (!normalizeServer(server)) {
-      setShowServer(true);
-      return setError("Isi alamat server yang diberikan pengelola sistem.");
-    }
     void run(async () => {
-      await session.setServer(server);
       try {
         await session.login(email.trim(), password);
       } catch (e) {
@@ -84,21 +76,7 @@ export function Login() {
       <Field label="Password">
         <PasswordInput testID="login-password" value={password} onChangeText={setPassword} onSubmitEditing={submit} />
       </Field>
-      {showServer && (
-        <Field label="Alamat server" hint="Alamat aplikasi Spaces milik PT Anda, sama dengan alamat versi web.">
-          <Input
-            testID="login-server"
-            value={server}
-            onChangeText={setServer}
-            keyboardType="url"
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder={DEFAULT_SERVER || "https://spaces.perusahaan.co.id"}
-          />
-        </Field>
-      )}
       <Button testID="login-submit" kind="primary" label={busy ? "Memeriksa…" : "Masuk"} busy={busy} onPress={submit} />
-      {!showServer && <Button kind="ghost" small label="Ubah alamat server" onPress={() => setShowServer(true)} />}
       <Txt variant="small" muted>
         Lupa password? Minta reset ke admin PT Anda. Admin PT meminta reset ke pengelola sistem. Reset lewat email tidak tersedia.
       </Txt>
