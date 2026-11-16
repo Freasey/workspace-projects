@@ -45,6 +45,7 @@ Semua aturan bisnis hidup di API, tidak di tampilan. API diberi versi (`/api/v1`
 
 ## 5. PT dan user
 
+- PT baru yang mendapat modul Booking Ruangan langsung berisi data contoh (3 ruangan dan 2 booking berjudul "Contoh" di hari kerja berikutnya), supaya layar pertamanya tidak kosong. Itu data biasa yang bebas diubah admin PT.
 - Operator membuat PT beserta satu admin pertama. Password sementara diacak per akun, ditampilkan sekali, berlaku 7 hari, dan wajib diganti saat login pertama.
 - Email unik di seluruh sistem; login cukup email dan password.
 - Admin PT menambah user sampai **batas maksimal** yang ditentukan operator.
@@ -96,7 +97,8 @@ Setiap layar pengaturan punya dua tab. Keduanya mengatur **data yang sama**; Adv
 - Menyimpan dari tab Simple hanya menyentuh isian yang tampil di Simple.
 - Isian Simple yang tidak bisa mewakili aturan Advanced ditampilkan terkunci ("Diatur di Advanced") dengan tombol kembalikan ke simple.
 - Tab Advanced menampilkan jumlah aturan yang aktif.
-- Tab terakhir diingat per admin.
+- Tiap bagian (data ruangan, jadwal, batasan, form booking) punya tabnya sendiri. Mengganti tab di satu bagian tidak mengubah bagian lain.
+- Tab terakhir diingat per admin dan per bagian.
 - Tab Advanced selalu terbuka untuk semua PT.
 
 | Proses | Tab Simple | Tab Advanced menambahkan |
@@ -145,3 +147,12 @@ Menunggu persetujuan → Terkonfirmasi → Check-in → Selesai, dengan cabang D
 ## 10. Ide modul berikutnya
 
 Peminjaman aset, booking kendaraan operasional, manajemen tamu, hot desk dan parkir, tiket fasilitas, pesanan konsumsi rapat, permintaan ATK, paket masuk. Aset, kendaraan, dan tamu memakai ulang mesin booking yang sama.
+
+## 11. Tampilan
+
+- Halaman utama (`/`) adalah landing page publik: pengenalan aplikasi dan tempat tautan unduh aplikasi Android dan iOS nanti. Form masuk ada di `/login`.
+- Modul Booking Ruangan punya halaman Bantuan berisi fungsi tiap fitur dengan gambar dan contoh.
+- Halaman masuk: panel merek di kiri, form di kanan. Tidak ada reset password lewat email; halaman hanya menjelaskan siapa yang bisa mereset.
+- Setelah masuk: bar atas, sidebar modul yang selalu terlihat, area kerja di kanan. Di layar sempit sidebar menjadi baris menu di atas.
+- Halaman awal modul Booking Ruangan adalah Jadwal: timeline dengan ruangan ke bawah dan jam ke samping, slot 15 menit. Booking dibuat dengan klik atau seret di area kosong. Di layar sempit timeline diganti daftar per ruangan.
+- Modul yang dijeda tetap tampil di sidebar dengan label "Dijeda".

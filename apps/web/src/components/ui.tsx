@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { fmtMin, SLOT_MINUTES } from "@app/shared";
 import { msg } from "../api";
 
@@ -26,9 +26,13 @@ export function useAction() {
 
 export type Mode = "simple" | "advanced";
 
-/** Tab Simple/Advanced. Pilihan terakhir diingat per user di perangkat ini. */
-export function useMode(userId: string): [Mode, (m: Mode) => void] {
-  const key = `mode:${userId}`;
+/**
+ * Tab Simple/Advanced milik satu bagian. Tiap bagian menyimpan pilihannya sendiri,
+ * jadi mengganti tab di satu bagian tidak mengubah bagian lain. Pilihan terakhir
+ * diingat per user dan per bagian di perangkat ini.
+ */
+export function useMode(userId: string, section: string): [Mode, (m: Mode) => void] {
+  const key = `mode:${userId}:${section}`;
   const [mode, setMode] = useState<Mode>(() => {
     try {
       return localStorage.getItem(key) === "advanced" ? "advanced" : "simple";
@@ -99,4 +103,37 @@ export function TempPassword({ email, password, onClose }: { email: string; pass
       <div className="small muted">Hanya ditampilkan sekali. Berlaku 7 hari dan wajib diganti saat login pertama.</div>
     </div>
   );
+}
+
+/** Dialog di atas halaman. Tutup dengan Escape atau klik di luar. */
+export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="dialog" role="dialog" aria-modal="true" aria-label={title}>
+        <h2>{title}</h2>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** Mengikuti media query, misalnya untuk mengganti timeline dengan daftar di layar sempit. */
+export function useMedia(query: string): boolean {
+  const [match, setMatch] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const on = () => setMatch(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, [query]);
+  return match;
+}
+
+export function Brand() {
+  return <span className="brand"><i aria-hidden="true" />Workspace</span>;
 }

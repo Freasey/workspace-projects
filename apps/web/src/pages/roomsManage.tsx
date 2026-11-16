@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { DEFAULT_HOURS, fmtMin, WEEKDAY_NAMES, type BookingDto, type ClosureDto, type RoomDto, type RoomHour, type RoomSettings } from "@app/shared";
 import { api, msg, todayIn, useUser } from "../api";
-import { ErrorNote, ModeTabs, Section, TimeSelect, useAction, useMode, type Mode } from "../components/ui";
+import { ErrorNote, ModeTabs, Section, TimeSelect, useAction, useMode } from "../components/ui";
 
 // Senin lebih dulu, Minggu terakhir.
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
@@ -45,8 +45,6 @@ function isUniform(draft: DayDraft[]): boolean {
 }
 
 export function RoomsManage() {
-  const me = useUser();
-  const [mode, setMode] = useMode(me.user.id);
   const [rooms, setRooms] = useState<RoomDto[]>([]);
   const [settings, setSettings] = useState<RoomSettings | null>(null);
   const [closures, setClosures] = useState<ClosureDto[]>([]);
@@ -77,7 +75,7 @@ export function RoomsManage() {
       <div className="page-head">
         <div>
           <h1>Kelola ruangan</h1>
-          <div className="muted">Tab Simple dan Advanced mengatur data yang sama. Advanced hanya menampilkan lebih banyak isian.</div>
+          <div className="muted">Tiap bagian punya tab Simple dan Advanced sendiri. Keduanya mengatur data yang sama; Advanced hanya menampilkan lebih banyak isian.</div>
         </div>
       </div>
       <ErrorNote error={loadError ?? error} />
@@ -126,23 +124,23 @@ export function RoomsManage() {
 
       {room && (
         <>
-          <RoomData key={`d-${room.id}`} room={room} mode={mode} setMode={setMode} onSaved={load} />
-          <RoomSchedule key={`s-${room.id}`} room={room} closures={closures} mode={mode} setMode={setMode} onSaved={load} />
+          <RoomData key={`d-${room.id}`} room={room} onSaved={load} />
+          <RoomSchedule key={`s-${room.id}`} room={room} closures={closures} onSaved={load} />
         </>
       )}
 
-      {settings && <Limits settings={settings} mode={mode} setMode={setMode} onSaved={load} />}
+      {settings && <Limits settings={settings} onSaved={load} />}
     </>
   );
 }
 
 interface EditorProps {
-  mode: Mode;
-  setMode: (m: Mode) => void;
   onSaved: () => Promise<void>;
 }
 
-function RoomData({ room, mode, setMode, onSaved }: EditorProps & { room: RoomDto }) {
+function RoomData({ room, onSaved }: EditorProps & { room: RoomDto }) {
+  const me = useUser();
+  const [mode, setMode] = useMode(me.user.id, "room-data");
   const [d, setD] = useState({
     name: room.name,
     capacity: room.capacity,
@@ -234,8 +232,9 @@ function RoomData({ room, mode, setMode, onSaved }: EditorProps & { room: RoomDt
   );
 }
 
-function RoomSchedule({ room, closures, mode, setMode, onSaved }: EditorProps & { room: RoomDto; closures: ClosureDto[] }) {
+function RoomSchedule({ room, closures, onSaved }: EditorProps & { room: RoomDto; closures: ClosureDto[] }) {
   const me = useUser();
+  const [mode, setMode] = useMode(me.user.id, "room-schedule");
   const [draft, setDraft] = useState(() => toDraft(room.hours));
   const [bufferMin, setBuffer] = useState(room.bufferMin);
   const [closure, setClosure] = useState({ date: todayIn(me.org.timezone, 1), note: "", allRooms: false });
@@ -415,7 +414,9 @@ function RoomSchedule({ room, closures, mode, setMode, onSaved }: EditorProps & 
   );
 }
 
-function Limits({ settings, mode, setMode, onSaved }: EditorProps & { settings: RoomSettings }) {
+function Limits({ settings, onSaved }: EditorProps & { settings: RoomSettings }) {
+  const me = useUser();
+  const [mode, setMode] = useMode(me.user.id, "limits");
   const [d, setD] = useState(settings);
   const [saved, setSaved] = useState(false);
   const { busy, error, run } = useAction();
