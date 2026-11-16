@@ -20,6 +20,7 @@ export function Login() {
           });
         }}
       >
+        <div className="wordmark"><img src="/logo.svg" alt="" />Spaces</div>
         <div>
           <h1>Masuk</h1>
           <p className="muted">Gunakan email dan password dari admin Anda.</p>

@@ -49,7 +49,7 @@ function Shell({ title, links, banner, children }: { title: string; links: [stri
     <>
       {banner}
       <header className="topbar">
-        <span className="brand">{title}</span>
+        <span className="brand"><img src="/logo.svg" alt="Spaces" />{title}</span>
         <nav>
           {links.map(([to, label]) => (
             <NavLink key={to} to={to} end>{label}</NavLink>
@@ -64,7 +64,7 @@ function Shell({ title, links, banner, children }: { title: string; links: [stri
 
 function AdminApp() {
   return (
-    <Shell title="Panel Pengelola" links={[["/admin", "Perusahaan"], ["/admin/key", "Kunci sekali pakai"], ["/admin/audit", "Log"]]}>
+    <Shell title="Spaces · Panel Pengelola" links={[["/admin", "Perusahaan"], ["/admin/key", "Kunci sekali pakai"], ["/admin/audit", "Log"]]}>
       <Routes>
         <Route path="/admin" element={<AdminOrgs />} />
         <Route path="/admin/orgs/:id" element={<AdminOrgDetail />} />
