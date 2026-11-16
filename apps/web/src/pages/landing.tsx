@@ -31,7 +31,7 @@ export function Landing() {
             <span className="lp-eyebrow">Aplikasi kantor berbasis modul</span>
             <h1>Ruang rapat selalu jelas siapa yang pakai, dan kapan.</h1>
             <p>
-              Workspace adalah aplikasi untuk urusan internal kantor. Modul pertamanya, Booking Ruangan,
+              Spaces adalah aplikasi untuk urusan internal kantor. Modul pertamanya, Booking Ruangan,
               menampilkan jadwal semua ruangan dalam satu layar dan menolak booking yang bentrok.
             </p>
             <div className="lp-cta">
@@ -93,7 +93,7 @@ export function Landing() {
           <ol className="lp-steps">
             <li>
               <h3>Perusahaan didaftarkan</h3>
-              <p>Pengelola Workspace mendaftarkan perusahaan Anda dan membuat akun admin pertama. Tiap perusahaan punya data dan zona waktunya sendiri.</p>
+              <p>Pengelola Spaces mendaftarkan perusahaan Anda dan membuat akun admin pertama. Tiap perusahaan punya data dan zona waktunya sendiri.</p>
             </li>
             <li>
               <h3>Admin menyiapkan ruangan dan user</h3>
@@ -120,7 +120,7 @@ export function Landing() {
               <span className="lp-store" aria-disabled="true"><strong>Android</strong><small>Segera hadir</small></span>
               <span className="lp-store" aria-disabled="true"><strong>iOS</strong><small>Segera hadir</small></span>
             </div>
-            <p className="lp-note">Sementara itu, Workspace bisa dibuka dari browser ponsel. Di layar kecil, jadwal tampil sebagai daftar per ruangan.</p>
+            <p className="lp-note">Sementara itu, Spaces bisa dibuka dari browser ponsel. Di layar kecil, jadwal tampil sebagai daftar per ruangan.</p>
           </div>
           <div className="lp-phone" aria-hidden="true">
             <b>Senin, 16 Nov</b>
