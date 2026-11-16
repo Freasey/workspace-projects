@@ -16,6 +16,7 @@ Platform aplikasi kantor berbasis modul. Modul pertama: **Booking Ruangan**.
 ```
 apps/api          API (Hono di Cloudflare Workers, D1)
 apps/web          Web (React + Vite)
+apps/mobile       Aplikasi mobile (React Native + Expo), lihat apps/mobile/README.md
 packages/shared   Tipe dan konstanta bersama
 scripts           Tes alur terhadap server lokal
 ```

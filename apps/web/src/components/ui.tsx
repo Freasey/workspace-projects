@@ -134,6 +134,19 @@ export function useMedia(query: string): boolean {
   return match;
 }
 
+/** Logo dan nama aplikasi. Warna petak mengikuti --brand-tile supaya terbaca di latar gelap. */
 export function Brand() {
-  return <span className="brand"><i aria-hidden="true" />Workspace</span>;
+  return (
+    <span className="brand">
+      <svg viewBox="112 112 800 800" aria-hidden="true">
+        <rect className="tile" x="143" y="143" width="344" height="344" rx="56" />
+        <rect className="tile" x="143" y="537" width="344" height="344" rx="56" />
+        <rect className="tile" x="537" y="537" width="344" height="344" rx="56" />
+        <rect className="tile-accent" x="537" y="143" width="344" height="344" rx="56" />
+        <path fill="#fff" d="M621 407V220a14 14 0 0 1 14-14h146a14 14 0 0 1 14 14v12H647v175z" />
+        <path fill="#fff" stroke="#fff" strokeWidth="12" strokeLinejoin="round" d="M687 268l102-36v165l-102 35z" />
+      </svg>
+      Spaces
+    </span>
+  );
 }

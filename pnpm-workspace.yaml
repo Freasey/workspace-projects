@@ -1,5 +1,7 @@
 packages:
   - apps/*
+  # Aplikasi mobile (Expo) dikelola dengan npm sendiri, di luar workspace pnpm.
+  - '!apps/mobile'
   - packages/*
 onlyBuiltDependencies:
   - esbuild

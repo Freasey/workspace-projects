@@ -220,6 +220,28 @@ check("kunci yang dihanguskan tidak bisa dipakai", r.status === 401);
 r = await sa("GET", `/admin/audit?orgId=${orgId}`);
 check("pemakaian kunci tercatat", r.json.logs.some((l) => l.action === "master_key.login" && l.actor.startsWith("Pengelola sistem sebagai")));
 
+console.log("\nKlien mobile (token Bearer)");
+{
+  const raw = (method, path, body, token) =>
+    fetch(`${BASE}/api/v1${path}`, {
+      method,
+      headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: method === "GET" ? undefined : JSON.stringify(body ?? {}),
+    });
+  let res = await raw("POST", "/auth/login", { email: email("budi"), password: "password-budi-1", client: "mobile" });
+  const login = await res.json();
+  check("login mobile mengembalikan token, tanpa cookie", res.status === 200 && login.token?.length > 20 && !res.headers.get("set-cookie"), JSON.stringify(login));
+  res = await raw("GET", "/auth/me", null, login.token);
+  check("token dipakai lewat header Authorization", res.status === 200 && (await res.json()).user?.email === email("budi"));
+  res = await raw("GET", "/rooms", null, login.token);
+  check("modul bisa dibuka dengan token", res.status === 200);
+  await raw("POST", "/auth/logout", {}, login.token);
+  res = await raw("GET", "/auth/me", null, login.token);
+  check("logout menghanguskan token", res.status === 401);
+  res = await raw("POST", "/auth/login", { email: email("budi"), password: "password-budi-1" });
+  check("login web tidak membocorkan token di badan respons", res.status === 200 && !(await res.json()).token);
+}
+
 console.log("\nNonaktif, suspend, reset");
 r = await book(member, 16 * 60 + 15, 17 * 60);
 check("booking user sebelum dinonaktifkan", r.status === 201, JSON.stringify(r.json));
