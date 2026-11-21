@@ -6,6 +6,7 @@ import { Brand } from "./components/ui";
 import { AdminAudit, AdminKey, AdminOrgDetail, AdminOrgs } from "./pages/admin";
 import { AuthLayout, ChangePassword, Login } from "./pages/auth";
 import { Home, OrgUsers } from "./pages/home";
+import { DisplayPage } from "./pages/display";
 import { Landing } from "./pages/landing";
 import { MyBookings, RoomsBooking } from "./pages/rooms";
 import { RoomsHelp } from "./pages/roomsHelp";
@@ -44,6 +45,8 @@ export function App() {
       <Routes>
         {/* Halaman utama adalah landing page publik. Form masuk ada di /login. */}
         <Route path="/" element={<Landing />} />
+        {/* Layar ruangan: perangkat di depan ruangan, tanpa login user. */}
+        <Route path="/layar" element={<DisplayPage />} />
         <Route path="/login" element={me ? <Navigate to={me.kind === "superadmin" ? "/admin" : "/rooms"} replace /> : <Login />} />
         <Route path="*" element={!me ? <Navigate to="/login" replace /> : me.kind === "superadmin" ? <AdminApp email={me.email} /> : <UserApp me={me} />} />
       </Routes>

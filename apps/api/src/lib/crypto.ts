@@ -38,6 +38,17 @@ export function randomString(length: number): string {
   return out.join("");
 }
 
+// Kode yang diketik manusia: huruf besar dan angka saja, tanpa yang mudah tertukar.
+const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+export function randomCode(length: number): string {
+  // 32 karakter membagi 256 tanpa sisa, jadi tidak bias.
+  return [...crypto.getRandomValues(new Uint8Array(length))].map((b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join("");
+}
+
+/** Menyamakan kode yang diketik: huruf besar, tanpa spasi dan tanda hubung. */
+export const normalizeCode = (code: string) => code.toUpperCase().replace(/[^A-Z0-9]/g, "");
+
 export function randomToken(): string {
   return hex(crypto.getRandomValues(new Uint8Array(32)));
 }

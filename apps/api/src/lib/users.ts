@@ -163,7 +163,7 @@ export async function listAudit(c: Ctx, orgId: string | null, limit = 100): Prom
         ? "Pengelola sistem"
         : log.actorKind === "superadmin_as_user"
           ? `Pengelola sistem sebagai ${userName ?? "user"}`
-          : (userName ?? "User"),
+          : (userName ?? (log.action.startsWith("room.display.") ? "Layar ruangan" : "User")),
     action: log.action,
     detail: log.detail,
     createdAt: log.createdAt,

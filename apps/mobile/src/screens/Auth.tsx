@@ -35,7 +35,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
   );
 }
 
-export function Login() {
+export function Login({ onDisplay }: { onDisplay: () => void }) {
   const { refresh } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -80,6 +80,7 @@ export function Login() {
       <Txt variant="small" muted>
         Lupa password? Minta reset ke admin PT Anda. Admin PT meminta reset ke pengelola sistem. Reset lewat email tidak tersedia.
       </Txt>
+      <Button testID="open-display" kind="ghost" small label="Pasang sebagai layar ruangan" onPress={onDisplay} style={{ alignSelf: "center" }} />
     </AuthLayout>
   );
 }

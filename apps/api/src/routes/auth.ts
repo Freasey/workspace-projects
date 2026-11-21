@@ -15,7 +15,7 @@ const TTL = { user: 7 * 86_400, superadmin: 12 * 3600, impersonation: 3600 } as 
 
 const BAD_LOGIN = () => new AppError(401, "BAD_CREDENTIALS", "Email atau password salah.");
 
-async function assertNotLocked(c: Ctx, key: string) {
+export async function assertNotLocked(c: Ctx, key: string) {
   const row = await c.get("db").select().from(s.loginAttempts).where(eq(s.loginAttempts.key, key)).get();
   if (row && row.lockedUntil > now()) {
     const minutes = Math.ceil((row.lockedUntil - now()) / 60);
@@ -23,7 +23,7 @@ async function assertNotLocked(c: Ctx, key: string) {
   }
 }
 
-async function recordFailure(c: Ctx, key: string) {
+export async function recordFailure(c: Ctx, key: string) {
   const t = now();
   // Hitungan direset kalau kegagalan terakhir sudah lebih lama dari masa kunci.
   const row = await c.env.DB.prepare(

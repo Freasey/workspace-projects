@@ -1,8 +1,9 @@
 import { createContext, useContext } from "react";
-import type { LoginResult, Me } from "@app/shared";
+import type { DisplayFeed, DisplayPairResult, LoginResult, Me } from "@app/shared";
 import { storage } from "./storage";
 
 const TOKEN_KEY = "session_token";
+const DISPLAY_KEY = "display_token";
 
 /**
  * Alamat server tertanam di aplikasi. Untuk development, timpa saat build/start
@@ -92,3 +93,52 @@ export function useUser(): UserMe {
   if (me?.kind !== "user") throw new Error("Bukan sesi user");
   return me;
 }
+
+// ---- Layar ruangan ----
+// Perangkat yang dipasang di depan ruangan memegang token layar, bukan sesi user.
+
+let displayToken: string | null = null;
+
+async function displayCall<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
+  let res: Response;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 20_000);
+  try {
+    res = await fetch(`${SERVER}/api/v1/display${path}`, {
+      method,
+      headers: { "content-type": "application/json", ...(displayToken ? { "x-display-token": displayToken } : {}) },
+      body: method === "GET" ? undefined : JSON.stringify(body ?? {}),
+      signal: ctrl.signal,
+    });
+  } catch {
+    throw new ApiErr(0, "NETWORK", "Tidak terhubung ke server.");
+  } finally {
+    clearTimeout(timer);
+  }
+  const json = (await res.json().catch(() => null)) as { error?: { code: string; message: string } } | null;
+  if (!res.ok) throw new ApiErr(res.status, json?.error?.code ?? "UNKNOWN", json?.error?.message ?? "Terjadi kesalahan.");
+  if (json === null) throw new ApiErr(res.status, "BAD_RESPONSE", "Jawaban server tidak dikenali.");
+  return json as T;
+}
+
+export const display = {
+  async restore(): Promise<void> {
+    displayToken = await storage.get(DISPLAY_KEY);
+  },
+  hasToken: () => displayToken !== null,
+  async pair(code: string): Promise<DisplayPairResult> {
+    const res = await displayCall<DisplayPairResult>("POST", "/pair", { code });
+    displayToken = res.token;
+    await storage.set(DISPLAY_KEY, res.token);
+    return res;
+  },
+  feed: () => displayCall<DisplayFeed>("GET", ""),
+  async unpair(): Promise<void> {
+    await displayCall("POST", "/unpair").catch(() => undefined);
+    await this.clear();
+  },
+  async clear(): Promise<void> {
+    displayToken = null;
+    await storage.remove(DISPLAY_KEY);
+  },
+};

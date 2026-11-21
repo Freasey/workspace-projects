@@ -129,3 +129,27 @@ export const bookings = sqliteTable("bookings", {
   cancelledAt: integer("cancelled_at"),
   cancelledBy: text("cancelled_by"),
 });
+
+export const bookingParticipants = sqliteTable(
+  "booking_participants",
+  {
+    bookingId: text("booking_id").notNull(),
+    userId: text("user_id").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.bookingId, t.userId] })],
+);
+
+export const roomDisplays = sqliteTable("room_displays", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  roomId: text("room_id").notNull(),
+  name: text("name").notNull(),
+  pairCodeHash: text("pair_code_hash"),
+  pairExpiresAt: integer("pair_expires_at"),
+  tokenHash: text("token_hash"),
+  createdBy: text("created_by"),
+  createdAt: integer("created_at").notNull(),
+  pairedAt: integer("paired_at"),
+  lastSeenAt: integer("last_seen_at"),
+  revokedAt: integer("revoked_at"),
+});

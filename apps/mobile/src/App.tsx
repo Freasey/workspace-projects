@@ -3,11 +3,12 @@ import { ActivityIndicator, BackHandler, Pressable, Text, View } from "react-nat
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Me } from "@app/shared";
-import { api, ApiErr, AuthContext, msg, session, type UserMe } from "./api";
+import { api, ApiErr, AuthContext, display, msg, session, type UserMe } from "./api";
 import { useTheme, type Theme } from "./theme";
 import { Brand, Button, Logo, Notice, Txt } from "./ui";
 import { Account, Home } from "./screens/Account";
 import { AuthLayout, Blocked, ForcedChangePassword, Login } from "./screens/Auth";
+import { DisplayScreen, PairDisplay } from "./screens/Display";
 import { MyBookings, Schedule } from "./screens/Rooms";
 
 export default function App() {
@@ -24,6 +25,13 @@ function Root() {
   const [loading, setLoading] = useState(true);
   // Server tidak terjangkau saat membuka aplikasi: sesi dipertahankan, user bisa mencoba lagi.
   const [offline, setOffline] = useState<string | null>(null);
+  // Mode layar ruangan: perangkat di depan ruangan, tanpa sesi user.
+  const [screen, setScreen] = useState<"app" | "pair" | "display">("app");
+  const [pairNotice, setPairNotice] = useState<string | null>(null);
+  const unpaired = useCallback((why: string) => {
+    setPairNotice(why);
+    setScreen("pair");
+  }, []);
 
   const refresh = useCallback(async () => {
     if (!session.hasToken()) {
@@ -53,9 +61,8 @@ function Root() {
 
   useEffect(() => {
     session.onAuthChanged(() => void refresh());
-    void session
-      .restore()
-      .then(refresh)
+    void Promise.all([session.restore(), display.restore()])
+      .then(() => (display.hasToken() ? setScreen("display") : refresh()))
       .finally(() => setLoading(false));
   }, [refresh]);
 
@@ -69,6 +76,21 @@ function Root() {
         <ActivityIndicator color={t.accent} />
       </View>
     );
+  } else if (screen === "display") {
+    onDeep = true;
+    body = <DisplayScreen onUnpaired={unpaired} />;
+  } else if (screen === "pair") {
+    body = (
+      <PairDisplay
+        notice={pairNotice}
+        onPaired={() => setScreen("display")}
+        onBack={() => {
+          setPairNotice(null);
+          setScreen("app");
+          void refresh();
+        }}
+      />
+    );
   } else if (!me && offline) {
     body = (
       <AuthLayout>
@@ -79,7 +101,7 @@ function Root() {
       </AuthLayout>
     );
   } else if (!me) {
-    body = <Login />;
+    body = <Login onDisplay={() => setScreen("pair")} />;
   } else if (me.kind === "superadmin") {
     body = <Blocked title="Panel pengelola ada di web" text="Akun pengelola sistem tidak dipakai di aplikasi mobile. Buka versi web untuk mengelola perusahaan, modul, dan kunci sekali pakai." />;
   } else if (me.org.status !== "active") {

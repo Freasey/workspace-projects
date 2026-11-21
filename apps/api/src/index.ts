@@ -3,6 +3,7 @@ import type { ApiError } from "@app/shared";
 import { AppError, loadSession, type AppEnv } from "./lib/context";
 import { admin } from "./routes/admin";
 import { auth } from "./routes/auth";
+import { display } from "./routes/display";
 import { org } from "./routes/org";
 import { rooms } from "./routes/rooms";
 
@@ -31,6 +32,7 @@ v1.route("/auth", auth);
 v1.route("/admin", admin);
 v1.route("/org", org);
 v1.route("/rooms", rooms);
+v1.route("/display", display);
 
 app.route("/api/v1", v1);
 app.all("/api/*", (c) => c.json<ApiError>({ error: { code: "NOT_FOUND", message: "Alamat API tidak ditemukan." } }, 404));
