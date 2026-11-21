@@ -228,9 +228,10 @@ export function RoomsHelp() {
           </table>
         </div>
         <ol style={{ marginTop: 12 }}>
-          <li>Admin PT membuka {isAdmin ? <Link to="/rooms/manage">Kelola ruangan</Link> : "Kelola ruangan"}, memilih ruangan, lalu menekan <strong>Buat kode pemasangan</strong> di bagian Layar ruangan.</li>
-          <li>Di perangkat yang akan dipasang, buka alamat <strong>/layar</strong> di peramban, atau buka aplikasi Android lalu pilih <strong>Pasang sebagai layar ruangan</strong> di halaman masuk.</li>
-          <li>Masukkan kode. Kode berlaku 15 menit dan hanya untuk satu perangkat.</li>
+          <li>Admin PT membuka {isAdmin ? <Link to="/rooms/manage">Kelola ruangan</Link> : "Kelola ruangan"}, memilih ruangan, lalu menekan <strong>Buat QR dan kode</strong> di bagian Layar ruangan.</li>
+          <li>Pindai QR dengan kamera tablet atau HP yang akan dipasang. Peramban terbuka dan layar langsung terpasang.</li>
+          <li>Di aplikasi Android: halaman masuk → <strong>Pasang sebagai layar ruangan</strong> → <strong>Pindai QR</strong>.</li>
+          <li>Tanpa kamera: buka alamat <strong>/layar</strong> lalu ketik kodenya. QR dan kode berlaku 15 menit dan hanya untuk satu perangkat.</li>
         </ol>
         <ul>
           <li>Layar tidak memakai akun siapa pun dan hanya bisa membaca jadwal satu ruangan. Admin bisa mencabutnya kapan saja dari Kelola ruangan.</li>

@@ -5,6 +5,7 @@ import {
   displayState,
   fmtCountdown,
   fmtMin,
+  parsePairingCode,
   type DisplayBooking,
   type DisplayFeed,
   type DisplayPairResult,
@@ -74,10 +75,40 @@ export async function pairThisDevice(code: string): Promise<DisplayPairResult> {
   return res;
 }
 
+/** Kode dari QR (/layar#kode=…). Hash langsung dihapus supaya tidak tertinggal di riwayat atau terbagi ulang. */
+function takeCodeFromUrl(): string | null {
+  const m = window.location.hash.match(/kode=([^&]+)/);
+  if (!m) return null;
+  window.history.replaceState(null, "", window.location.pathname);
+  return parsePairingCode(decodeURIComponent(m[1]!)) ?? decodeURIComponent(m[1]!);
+}
+
 export function DisplayPage() {
   const [token, setToken] = useState(() => displayToken.get());
   const [notice, setNotice] = useState<string | null>(null);
-  if (!token) return <PairScreen notice={notice} onPaired={setToken} />;
+  // Dibaca sekali saat halaman dibuka dari QR. Kalau perangkat sudah terpasang, kode baru menggantikannya.
+  const [qrCode, setQrCode] = useState(takeCodeFromUrl);
+  useEffect(() => {
+    const onHash = () => {
+      const code = takeCodeFromUrl();
+      if (code) setQrCode(code);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  if (!token || qrCode) {
+    return (
+      <PairScreen
+        notice={notice}
+        autoCode={qrCode}
+        onBack={token ? () => setQrCode(null) : undefined}
+        onPaired={(t) => {
+          setQrCode(null);
+          setToken(t);
+        }}
+      />
+    );
+  }
   return (
     <DisplayScreen
       token={token}
@@ -90,30 +121,44 @@ export function DisplayPage() {
   );
 }
 
-function PairScreen({ notice, onPaired }: { notice: string | null; onPaired: (token: string) => void }) {
-  const [code, setCode] = useState("");
+function PairScreen(props: { notice: string | null; autoCode: string | null; onPaired: (token: string) => void; onBack?: () => void }) {
+  const { notice, onPaired } = props;
+  const [code, setCode] = useState(props.autoCode ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pair = useCallback(
+    (value: string) => {
+      setBusy(true);
+      setError(null);
+      pairThisDevice(value)
+        .then((r) => onPaired(r.token))
+        .catch((err) => setError(`${msg(err)}`))
+        .finally(() => setBusy(false));
+    },
+    [onPaired],
+  );
+  // Dibuka dari QR: langsung dipasang tanpa perlu menekan apa pun.
+  const auto = useRef(props.autoCode);
+  useEffect(() => {
+    if (auto.current) pair(auto.current);
+    auto.current = null;
+  }, [pair]);
   return (
     <div className="disp-pair">
       <form
         className="disp-pair-card stack"
         onSubmit={(e) => {
           e.preventDefault();
-          setBusy(true);
-          setError(null);
-          pairThisDevice(code)
-            .then((r) => onPaired(r.token))
-            .catch((err) => setError(msg(err)))
-            .finally(() => setBusy(false));
+          pair(code);
         }}
       >
         <Brand />
         <h1>Pasang layar ruangan</h1>
         <p className="muted" style={{ margin: 0 }}>
-          Perangkat ini akan menampilkan jadwal hari ini, hitung mundur, dan peserta untuk satu ruangan. Minta kode pemasangan ke admin PT
-          (menu Kelola ruangan → Layar ruangan).
+          Perangkat ini akan menampilkan jadwal hari ini, hitung mundur, dan peserta untuk satu ruangan. Minta QR atau kode pemasangan ke admin PT
+          (menu Kelola ruangan → Layar ruangan). Memindai QR dengan kamera perangkat ini langsung memasangnya; kode di bawah untuk perangkat tanpa kamera.
         </p>
+        {props.autoCode && busy && <div className="notice">Memasang dari QR…</div>}
         {notice && <div className="notice warn">{notice}</div>}
         {error && <div className="notice error" role="alert">{error}</div>}
         <div>
@@ -133,6 +178,11 @@ function PairScreen({ notice, onPaired }: { notice: string | null; onPaired: (to
           />
         </div>
         <button className="primary" disabled={busy}>{busy ? "Memasang…" : "Pasang"}</button>
+        {props.onBack && (
+          <button type="button" onClick={props.onBack} style={{ width: "100%" }}>
+            Kembali ke layar yang sudah terpasang
+          </button>
+        )}
         <div className="small muted">
           Bukan layar ruangan? <Link to="/login">Masuk ke aplikasi</Link>
         </div>

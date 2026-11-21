@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { displayClock, displayState, fmtCountdown, fmtMin, type DisplayBooking, type DisplayFeed, type DisplayTone } from "@app/shared";
 import { ApiErr, display, msg } from "../api";
 import { fmtDate, fmtDateShort } from "../date";
+import { QrScanner } from "../scan";
 import { useTheme } from "../theme";
 import { Button, ErrorNote, Field, Input, Notice, Txt, useAction } from "../ui";
 import { AuthLayout } from "./Auth";
@@ -23,25 +24,30 @@ const DARK = { bg: "#0d1117", card: "#161d26", ink: "#eef2f6", muted: "#aeb9c5",
 /** Memasang perangkat ini sebagai layar ruangan dengan kode dari admin PT. */
 export function PairDisplay({ notice, onPaired, onBack }: { notice?: string | null; onPaired: () => void; onBack: () => void }) {
   const [code, setCode] = useState("");
+  const [scanning, setScanning] = useState(false);
   const { busy, error, run, setError } = useAction();
-  const submit = () => {
-    if (!code.trim()) return setError("Isi kode pemasangan.");
+  const pair = (value: string) =>
     void run(async () => {
-      await display.pair(code);
+      await display.pair(value);
       onPaired();
     });
+  const submit = () => {
+    if (!code.trim()) return setError("Isi kode pemasangan.");
+    pair(code);
   };
   return (
     <AuthLayout>
       <View style={{ gap: 4 }}>
         <Txt variant="title" accessibilityRole="header">Pasang layar ruangan</Txt>
         <Txt muted>
-          Perangkat ini akan menampilkan jadwal hari ini, hitung mundur, dan peserta untuk satu ruangan. Minta kode pemasangan ke admin PT (web: Kelola
-          ruangan → Layar ruangan).
+          Perangkat ini akan menampilkan jadwal hari ini, hitung mundur, dan peserta untuk satu ruangan. Minta QR atau kode pemasangan ke admin PT (web:
+          Kelola ruangan → Layar ruangan).
         </Txt>
       </View>
       {!!notice && <Notice tone="warn" text={notice} />}
       <ErrorNote error={error} />
+      <Button testID="pair-scan" kind="primary" label={busy ? "Memasang…" : "Pindai QR"} busy={busy} onPress={() => setScanning(true)} />
+      <Txt variant="small" muted style={{ textAlign: "center" }}>atau ketik kodenya</Txt>
       <Field label="Kode pemasangan">
         <Input
           testID="pair-code"
@@ -55,8 +61,18 @@ export function PairDisplay({ notice, onPaired, onBack }: { notice?: string | nu
           style={{ fontSize: 24, letterSpacing: 4, textAlign: "center", fontVariant: ["tabular-nums"] }}
         />
       </Field>
-      <Button testID="pair-submit" kind="primary" label={busy ? "Memasang…" : "Pasang"} busy={busy} onPress={submit} />
+      <Button testID="pair-submit" label="Pasang dengan kode" disabled={busy} onPress={submit} />
       <Button kind="ghost" label="Kembali ke halaman masuk" onPress={onBack} />
+      {scanning && (
+        <QrScanner
+          onClose={() => setScanning(false)}
+          onCode={(scanned) => {
+            setScanning(false);
+            setCode(scanned);
+            pair(scanned);
+          }}
+        />
+      )}
     </AuthLayout>
   );
 }

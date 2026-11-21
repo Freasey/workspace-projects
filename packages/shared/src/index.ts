@@ -269,3 +269,19 @@ export function displayState(feed: DisplayFeed, now: number): DisplayState {
 
 /** Jam lokal PT "HH.MM" untuk detik `now`. */
 export const displayClock = (feed: DisplayFeed, now: number) => fmtMin(((Math.floor((now - feed.dayStart) / 60) % 1440) + 1440) % 1440);
+
+// ---- QR pemasangan layar ----
+// QR berisi alamat /layar dengan kode di bagian hash (#kode=...). Bagian hash
+// tidak pernah dikirim ke server, jadi kode tidak tercatat di log. Dipindai
+// dengan kamera bawaan, alamat itu langsung membuka dan memasang layar web;
+// aplikasi mobile membaca kode yang sama dari QR lewat pemindainya sendiri.
+
+export const pairingUrl = (origin: string, code: string) => `${origin.replace(/\/+$/, "")}/layar#kode=${encodeURIComponent(code)}`;
+
+/** Mengambil kode pemasangan dari isi QR (alamat /layar#kode=…) atau dari kode yang diketik. Null kalau tidak dikenali. */
+export function parsePairingCode(text: string): string | null {
+  const raw = text.trim();
+  const fromUrl = raw.match(/[#?&]kode=([A-Za-z0-9-]+)/)?.[1];
+  const code = (fromUrl ? decodeURIComponent(fromUrl) : raw).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return /^[A-Z2-9]{8}$/.test(code) ? `${code.slice(0, 4)}-${code.slice(4)}` : null;
+}

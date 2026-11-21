@@ -26,6 +26,13 @@
     },
     "plugins": [
       "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Kamera dipakai untuk memindai QR pemasangan layar ruangan.",
+          "recordAudioAndroid": false
+        }
+      ],
       "./plugins/withReleaseSigning.js"
     ]
   }

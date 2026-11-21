@@ -505,3 +505,5 @@ span.tl-ev { display: block; }
   .disp-clock { text-align: left; }
 }
 .disp-pair-card button.primary { width: 100%; padding: 11px; font-size: 1rem; }
+.pair-box { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; margin-top: 8px; }
+.pair-box > .stack { flex: 1; min-width: 220px; }

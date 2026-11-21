@@ -138,7 +138,9 @@ Menunggu persetujuan → Terkonfirmasi → Check-in → Selesai, dengan cabang D
 
 Perangkat (tablet, HP, atau peramban) yang dipasang di depan satu ruangan dan menampilkan status, jadwal hari ini, hitung mundur, dan peserta. Web di `/layar`; aplikasi mobile lewat "Pasang sebagai layar ruangan" di halaman masuk.
 
-- Admin PT membuat kode pemasangan per ruangan dari Kelola ruangan. Kode 8 karakter, ditampilkan sekali, disimpan sebagai hash, berlaku 15 menit, dan hangus setelah dipakai satu perangkat.
+- Admin PT membuat QR dan kode pemasangan per ruangan dari Kelola ruangan. Kode 8 karakter, ditampilkan sekali, disimpan sebagai hash, berlaku 15 menit, dan hangus setelah dipakai satu perangkat.
+- QR berisi alamat `/layar#kode=XXXX-XXXX` (kode yang sama). Kode ditaruh di bagian hash supaya tidak terkirim ke server atau tercatat di log. Dipindai dengan kamera bawaan, peramban membuka `/layar`, langsung memasang, lalu menghapus hash dari alamat. Aplikasi mobile punya pemindai QR sendiri (expo-camera) yang hanya mengambil kodenya dan menolak QR lain. Mengetik kode tetap tersedia untuk perangkat tanpa kamera.
+- QR baru di perangkat yang sudah terpasang menggantikan pemasangan lama kalau berhasil; kalau gagal, layar lama bisa dipakai kembali.
 - Perangkat menerima token layar sendiri (header `X-Display-Token`), bukan sesi user. Token hanya bisa membaca jadwal ruangan itu dan tidak kedaluwarsa sampai dicabut admin atau perangkat keluar dari mode layar.
 - Percobaan kode dibatasi per alamat IP seperti login: 5 kali gagal, lalu jeda 15 menit.
 - Status dihitung di perangkat dari waktu server: Sedang dipakai (ada booking berjalan, hitung mundur ke akhir), Segera dipakai (booking mulai dalam 10 menit), Tersedia (buka dan kosong), Tutup (di luar jam buka, istirahat, atau tanggal tutup). Selain saat dipakai, hitung mundur menuju booking berikutnya, termasuk dari hari lain sampai 14 hari ke depan.

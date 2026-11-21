@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   DEFAULT_HOURS,
   fmtMin,
+  pairingUrl,
   WEEKDAY_NAMES,
   type BookingDto,
   type ClosureDto,
@@ -13,6 +14,7 @@ import {
   type RoomSettings,
 } from "@app/shared";
 import { api, fmtDateTime, msg, todayIn, useUser } from "../api";
+import { QrCode } from "../components/qr";
 import { pairThisDevice } from "./display";
 import { ErrorNote, ModeTabs, Section, TimeSelect, useAction, useMode } from "../components/ui";
 
@@ -523,10 +525,29 @@ function RoomDisplays({ room }: { room: RoomDto }) {
             <strong>Kode pemasangan untuk {created.display.name}</strong>
             <button className="ghost sm" onClick={() => setCreated(null)}>Tutup</button>
           </div>
-          <div className="disp-layar-code" style={{ margin: "6px 0" }}>{created.code}</div>
-          <div className="small">
-            Di perangkat yang akan dipasang, buka <strong>{window.location.host}/layar</strong> di peramban, atau buka aplikasi Android Spaces lalu pilih{" "}
-            <strong>Pasang sebagai layar ruangan</strong>. Masukkan kode ini. Hanya ditampilkan sekali, berlaku 15 menit, dan hanya untuk satu perangkat.
+          <div className="pair-box">
+            <QrCode value={pairingUrl(window.location.origin, created.code)} label={`Kode QR pemasangan ${created.code}`} />
+            <div className="stack">
+              <div>
+                <div className="small muted">Kode</div>
+                <div className="disp-layar-code">{created.code}</div>
+              </div>
+              <ol className="small" style={{ margin: 0, paddingLeft: 18 }}>
+                <li>
+                  <strong>Pindai QR</strong> dengan kamera tablet atau HP yang akan dipasang. Peramban terbuka dan layar langsung terpasang.
+                </li>
+                <li>
+                  Di aplikasi Android Spaces: halaman masuk → <strong>Pasang sebagai layar ruangan</strong> → <strong>Pindai QR</strong>.
+                </li>
+                <li>
+                  Tanpa kamera: buka <strong>{window.location.host}/layar</strong> lalu ketik kodenya.
+                </li>
+              </ol>
+              <div className="small muted">
+                QR dan kode hanya ditampilkan sekali, berlaku sampai{" "}
+                {new Date(created.display.pairExpiresAt! * 1000).toLocaleTimeString("id-ID", { timeStyle: "short" })}, dan hanya untuk satu perangkat.
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -547,7 +568,7 @@ function RoomDisplays({ room }: { room: RoomDto }) {
             })
           }
         >
-          Buat kode pemasangan
+          Buat QR dan kode
         </button>
         <button
           disabled={busy}
