@@ -86,6 +86,9 @@ export function Login() {
         <p className="small muted">
           Lupa password? Minta reset ke admin PT Anda. Admin PT meminta reset ke pengelola sistem. Reset lewat email tidak tersedia.
         </p>
+        <p className="small muted">
+          Memasang tablet di depan ruangan? <Link to="/layar">Pasang sebagai layar ruangan</Link>
+        </p>
       </form>
     </AuthLayout>
   );

@@ -8,7 +8,7 @@ Dokumen ini mencatat keputusan alur yang sudah disepakati. Kode mengikuti dokume
 - Operator (super admin) mendaftarkan PT, menentukan modul yang didapat, dan bisa menjeda modul.
 - Aplikasi terdiri dari banyak modul. Modul pertama adalah Booking Ruangan.
 - Tersedia versi web dan aplikasi mobile (React Native). Android lebih dulu, iOS menyusul dari kode yang sama. Mobile memakai API yang sama.
-- Aplikasi mobile untuk pemakaian sehari-hari: jadwal, booking, booking saya, ganti password. Pengaturan (kelola ruangan, pengguna) dan panel super admin tetap di web.
+- Aplikasi mobile untuk pemakaian sehari-hari: jadwal, booking, booking saya, ganti password, dan mode layar ruangan. Pengaturan (kelola ruangan, pengguna, membuat kode layar) dan panel super admin tetap di web.
 - Web login dengan cookie; mobile dengan token yang dikirim lewat header `Authorization: Bearer` dan disimpan di penyimpanan terenkripsi perangkat.
 
 ## 2. Stack
@@ -109,7 +109,7 @@ Setiap layar pengaturan punya dua tab. Keduanya mengatur **data yang sama**; Adv
 | Jadwal ruangan | Centang hari, satu jam buka dan tutup | Jam berbeda per hari, jam istirahat, tanggal tutup, jeda antar-booking |
 | Data ruangan | Nama, kapasitas, lokasi | Fasilitas, foto, akses per grup, wajib persetujuan |
 | Batasan booking | Durasi maksimal, booking paling jauh | Jarak minimal, kuota per user, batas pembatalan, check-in dan auto-release |
-| Form booking | Ruangan, tanggal, jam, judul | Booking berulang, jumlah peserta, catatan |
+| Form booking | Ruangan, tanggal, jam, judul, peserta | Booking berulang, catatan |
 | Tambah user | Nama, email, peran | Grup, impor banyak |
 | Laporan | Daftar booking | Utilisasi, jam sibuk, tingkat tidak datang |
 
@@ -126,6 +126,27 @@ Batasan booking diatur sekali untuk seluruh PT; tiap ruangan mewarisinya dan bis
 ### Status booking
 
 Menunggu persetujuan → Terkonfirmasi → Check-in → Selesai, dengan cabang Ditolak, Dibatalkan, dan Dilepas (tidak datang). Tanpa fitur Advanced, hanya Terkonfirmasi → Selesai atau Dibatalkan.
+
+### Peserta
+
+- Peserta dipilih dari user aktif di PT yang sama, paling banyak 50. Pemesan otomatis ikut dan tidak dicatat sebagai peserta.
+- Pemesan atau admin PT bisa mengubah peserta selama booking belum selesai.
+- Melebihi kapasitas ruangan hanya diberi peringatan, tidak ditolak.
+- User yang dinonaktifkan tidak lagi tampil sebagai peserta.
+
+### Layar ruangan
+
+Perangkat (tablet, HP, atau peramban) yang dipasang di depan satu ruangan dan menampilkan status, jadwal hari ini, hitung mundur, dan peserta. Web di `/layar`; aplikasi mobile lewat "Pasang sebagai layar ruangan" di halaman masuk.
+
+- Admin PT membuat QR dan kode pemasangan per ruangan dari Kelola ruangan. Kode 8 karakter, ditampilkan sekali, disimpan sebagai hash, berlaku 15 menit, dan hangus setelah dipakai satu perangkat.
+- QR berisi alamat `/layar#kode=XXXX-XXXX` (kode yang sama). Kode ditaruh di bagian hash supaya tidak terkirim ke server atau tercatat di log. Dipindai dengan kamera bawaan, peramban membuka `/layar`, langsung memasang, lalu menghapus hash dari alamat. Aplikasi mobile punya pemindai QR sendiri (expo-camera) yang hanya mengambil kodenya dan menolak QR lain. Mengetik kode tetap tersedia untuk perangkat tanpa kamera.
+- QR baru di perangkat yang sudah terpasang menggantikan pemasangan lama kalau berhasil; kalau gagal, layar lama bisa dipakai kembali.
+- Perangkat menerima token layar sendiri (header `X-Display-Token`), bukan sesi user. Token hanya bisa membaca jadwal ruangan itu dan tidak kedaluwarsa sampai dicabut admin atau perangkat keluar dari mode layar.
+- Percobaan kode dibatasi per alamat IP seperti login: 5 kali gagal, lalu jeda 15 menit.
+- Status dihitung di perangkat dari waktu server: Sedang dipakai (ada booking berjalan, hitung mundur ke akhir), Segera dipakai (booking mulai dalam 10 menit), Tersedia (buka dan kosong), Tutup (di luar jam buka, istirahat, atau tanggal tutup). Selain saat dipakai, hitung mundur menuju booking berikutnya, termasuk dari hari lain sampai 14 hari ke depan.
+- Perangkat membaca ulang setiap 30 detik dan saat booking mulai atau selesai. Kalau koneksi putus, data terakhir tetap tampil dengan penanda.
+- Modul dijeda, PT di-suspend, atau ruangan nonaktif: layar menampilkan "Tidak tersedia" beserta catatannya. PT diarsipkan atau layar dicabut: perangkat kembali ke form kode.
+- Judul booking, nama pemesan, dan nama peserta terlihat oleh siapa pun yang lewat di depan layar.
 
 ### Kasus tepi
 

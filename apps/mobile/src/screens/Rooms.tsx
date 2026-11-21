@@ -3,6 +3,7 @@ import { AppState, Pressable, RefreshControl, ScrollView, Text, View } from "rea
 import { fmtMin, SLOT_MINUTES, WEEKDAY_NAMES, type BookingDto, type BookingStatus, type ClosureDto, type RoomDto, type RoomHour, type RoomSettings } from "@app/shared";
 import { api, msg, useUser } from "../api";
 import { addDays, dayOfMonth, dayShort, fmtDate, fmtDateShort, nowMinIn, todayIn, weekdayOf } from "../date";
+import { PeopleSheet, peopleSummary, usePeople } from "../people";
 import { DateSheet, TimeSheet } from "../pickers";
 import { useTheme } from "../theme";
 import { Badge, Button, Card, DetailRow, ErrorNote, Field, Input, Loading, Notice, PickerRow, Sheet, Toast, Txt, useAction, useToast, type Tone } from "../ui";
@@ -250,6 +251,7 @@ export function Schedule() {
             await load();
             setToast("Booking dibatalkan.");
           }}
+          onChanged={load}
         />
       )}
       <Toast text={toast} />
@@ -332,7 +334,9 @@ function BookingForm(props: {
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
   const [showNote, setShowNote] = useState(false);
-  const [picker, setPicker] = useState<"room" | "date" | "start" | "end" | null>(null);
+  const [participantIds, setParticipantIds] = useState<string[]>([]);
+  const people = usePeople();
+  const [picker, setPicker] = useState<"room" | "date" | "start" | "end" | "people" | null>(null);
   const { busy, error, run, setError } = useAction();
 
   const today = todayIn(tz);
@@ -362,7 +366,7 @@ function BookingForm(props: {
   const submit = () => {
     if (!title.trim()) return setError("Isi judul booking.");
     void run(async () => {
-      const res = await api<{ booking: BookingDto }>("POST", "/rooms/bookings", { ...d, title: title.trim(), note: showNote ? note.trim() : "" });
+      const res = await api<{ booking: BookingDto }>("POST", "/rooms/bookings", { ...d, title: title.trim(), note: showNote ? note.trim() : "", participantIds });
       await props.onDone(res.booking);
     });
   };
@@ -404,6 +408,12 @@ function BookingForm(props: {
         )}
         <Field label="Judul">
           <Input testID="booking-title" value={title} onChangeText={setTitle} maxLength={120} placeholder="Misalnya: Rapat mingguan tim" />
+        </Field>
+        <Field
+          label="Peserta (opsional)"
+          hint={participantIds.length + 1 > room.capacity ? `Peserta dan pemesan (${participantIds.length + 1} orang) melebihi kapasitas ruangan (${room.capacity} orang).` : undefined}
+        >
+          <PickerRow testID="pick-people" value={peopleSummary(participantIds, people)} onPress={() => setPicker("people")} />
         </Field>
         {showNote ? (
           <Field label="Catatan (opsional)">
@@ -448,6 +458,17 @@ function BookingForm(props: {
             })}
           </View>
         </Sheet>
+      )}
+      {picker === "people" && (
+        <PeopleSheet
+          value={participantIds}
+          excludeId={me.user.id}
+          onClose={() => setPicker(null)}
+          onDone={(ids) => {
+            setParticipantIds(ids);
+            setPicker(null);
+          }}
+        />
       )}
       {picker === "date" && (
         <DateSheet
@@ -496,11 +517,16 @@ function BookingForm(props: {
 
 // ---- Detail booking ----
 
-function BookingDetail({ booking: b, onClose, onCancelled }: { booking: BookingDto; onClose: () => void; onCancelled: () => Promise<void> }) {
+function BookingDetail(props: { booking: BookingDto; onClose: () => void; onCancelled: () => Promise<void>; onChanged: () => Promise<void> }) {
+  const { onClose, onCancelled } = props;
   const me = useUser();
+  const [b, setB] = useState(props.booking);
   const [asking, setAsking] = useState(false);
+  const [editing, setEditing] = useState(false);
   const { busy, error, run } = useAction();
-  const canCancel = b.status === "confirmed" && b.startAt * 1000 > Date.now() && (b.userId === me.user.id || me.user.role === "admin");
+  const mayChange = b.userId === me.user.id || me.user.role === "admin";
+  const canCancel = b.status === "confirmed" && b.startAt * 1000 > Date.now() && mayChange;
+  const canEditPeople = b.status === "confirmed" && b.endAt * 1000 > Date.now() && mayChange;
 
   return (
     <Sheet
@@ -534,10 +560,34 @@ function BookingDetail({ booking: b, onClose, onCancelled }: { booking: BookingD
         <DetailRow label="Ruangan">{b.roomName}</DetailRow>
         <DetailRow label="Waktu">{`${fmtDate(b.date)}, ${fmtMin(b.startMin)}–${fmtMin(b.endMin)}`}</DetailRow>
         <DetailRow label="Pemesan">{b.userName}</DetailRow>
+        <DetailRow label="Peserta">
+          <View style={{ gap: 6, alignItems: "flex-start" }}>
+            <Txt>{b.participants.length ? b.participants.map((p) => p.name).join(", ") : "Belum ada"}</Txt>
+            {canEditPeople && <Button testID="edit-people" small label="Ubah peserta" onPress={() => setEditing(true)} />}
+          </View>
+        </DetailRow>
         <DetailRow label="Status"><StatusBadge status={b.status} /></DetailRow>
         {!!b.note && <DetailRow label="Catatan">{b.note}</DetailRow>}
       </View>
       {asking && <Notice tone="warn" text="Batalkan booking ini? Slotnya langsung bisa dipakai orang lain." />}
+      {editing && (
+        <PeopleSheet
+          title="Ubah peserta"
+          value={b.participants.map((p) => p.id)}
+          excludeId={b.userId}
+          busy={busy}
+          onClose={() => setEditing(false)}
+          onDone={(ids) =>
+            void run(async () => {
+              // Lembar ditutup dulu supaya pesan penolakan terlihat di detail.
+              setEditing(false);
+              const res = await api<{ booking: BookingDto }>("PUT", `/rooms/bookings/${b.id}/participants`, { participantIds: ids });
+              setB(res.booking);
+              await props.onChanged();
+            })
+          }
+        />
+      )}
     </Sheet>
   );
 }
@@ -631,6 +681,7 @@ export function MyBookings() {
             await load();
             setToast("Booking dibatalkan.");
           }}
+          onChanged={load}
         />
       )}
       <Toast text={toast} />

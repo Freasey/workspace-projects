@@ -64,7 +64,9 @@ export function RoomsHelp() {
     ["booking", "Membuat booking"],
     ["ditolak", "Kalau booking ditolak"],
     ["batal", "Melihat dan membatalkan booking"],
+    ["peserta", "Peserta booking"],
     ["status", "Status booking"],
+    ["layar", "Layar ruangan"],
   ];
   if (isAdmin) topics.push(["ruangan", "Admin: data ruangan"], ["jam", "Admin: jadwal ruangan"], ["batasan", "Admin: batasan booking"], ["tab", "Admin: tab Simple dan Advanced"]);
 
@@ -184,6 +186,18 @@ export function RoomsHelp() {
         </ul>
       </Topic>
 
+      <Topic id="peserta" title="Peserta booking">
+        <p>
+          Saat membuat booking, ketik nama di isian <strong>Peserta</strong> untuk menambahkan rekan kerja dari perusahaan yang sama. Anda sebagai pemesan
+          sudah otomatis ikut dan tidak perlu ditambahkan.
+        </p>
+        <ul>
+          <li>Peserta bisa diubah lewat Detail booking (tombol Ubah) oleh pemesan atau admin PT, selama booking belum selesai.</li>
+          <li>Kalau jumlah peserta ditambah pemesan melebihi kapasitas ruangan, form menampilkan peringatan. Booking tetap bisa disimpan.</li>
+          <li>Daftar peserta tampil di layar ruangan saat booking berjalan atau akan dimulai.</li>
+        </ul>
+      </Topic>
+
       <Topic id="status" title="Status booking">
         <div className="table-wrap">
           <table>
@@ -195,6 +209,35 @@ export function RoomsHelp() {
             </tbody>
           </table>
         </div>
+      </Topic>
+
+      <Topic id="layar" title="Layar ruangan">
+        <p>
+          Tablet atau HP yang dipasang di depan pintu bisa menjadi <strong>layar ruangan</strong>. Layar menampilkan status ruangan dengan warna yang
+          terbaca dari jauh, jadwal hari ini, hitung mundur, dan daftar peserta.
+        </p>
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>Warna</th><th>Artinya</th><th>Hitung mundur</th></tr></thead>
+            <tbody>
+              <tr><td><span className="badge bad">Sedang dipakai</span></td><td>Ada booking yang sedang berjalan.</td><td>Sampai booking berakhir</td></tr>
+              <tr><td><span className="badge warn">Segera dipakai</span></td><td>Booking berikutnya mulai dalam 10 menit.</td><td>Sampai booking dimulai</td></tr>
+              <tr><td><span className="badge ok">Tersedia</span></td><td>Ruangan buka dan kosong.</td><td>Sampai booking berikutnya</td></tr>
+              <tr><td><span className="badge">Tutup</span></td><td>Di luar jam buka, jam istirahat, atau tanggal tutup.</td><td>Sampai booking berikutnya</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <ol style={{ marginTop: 12 }}>
+          <li>Admin PT membuka {isAdmin ? <Link to="/rooms/manage">Kelola ruangan</Link> : "Kelola ruangan"}, memilih ruangan, lalu menekan <strong>Buat QR dan kode</strong> di bagian Layar ruangan.</li>
+          <li>Pindai QR dengan kamera tablet atau HP yang akan dipasang. Peramban terbuka dan layar langsung terpasang.</li>
+          <li>Di aplikasi Android: halaman masuk → <strong>Pasang sebagai layar ruangan</strong> → <strong>Pindai QR</strong>.</li>
+          <li>Tanpa kamera: buka alamat <strong>/layar</strong> lalu ketik kodenya. QR dan kode berlaku 15 menit dan hanya untuk satu perangkat.</li>
+        </ol>
+        <ul>
+          <li>Layar tidak memakai akun siapa pun dan hanya bisa membaca jadwal satu ruangan. Admin bisa mencabutnya kapan saja dari Kelola ruangan.</li>
+          <li>Layar memperbarui diri setiap 30 detik dan tetap menampilkan data terakhir kalau koneksi putus.</li>
+          <li>Kalau modul dijeda, ruangan dinonaktifkan, atau perusahaan dihentikan, layar menampilkan "Tidak tersedia".</li>
+        </ul>
       </Topic>
 
       {isAdmin && (

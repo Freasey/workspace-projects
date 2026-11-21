@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent } from "rea
 import { Link } from "react-router-dom";
 import { fmtMin, SLOT_MINUTES, WEEKDAY_NAMES, type BookingDto, type BookingStatus, type ClosureDto, type RoomDto, type RoomSettings } from "@app/shared";
 import { api, msg, todayIn, useUser } from "../api";
+import { PeoplePicker, peopleText } from "../components/people";
 import { ErrorNote, Modal, ModeTabs, TimeSelect, useAction, useMedia, useMode } from "../components/ui";
 
 const weekdayOf = (date: string) => new Date(`${date}T00:00:00Z`).getUTCDay();
@@ -189,6 +190,7 @@ export function RoomsBooking() {
             await load();
             setToast("Booking dibatalkan.");
           }}
+          onChanged={load}
         />
       )}
       {toast && <div className="toast" role="status">{toast}</div>}
@@ -331,6 +333,7 @@ function BookingDialog(props: { draft: Draft; rooms: RoomDto[]; settings: RoomSe
   const [d, setD] = useState(props.draft);
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
+  const [participantIds, setParticipantIds] = useState<string[]>([]);
   const { busy, error, run } = useAction();
 
   const room = props.rooms.find((r) => r.id === d.roomId) ?? props.rooms[0]!;
@@ -346,7 +349,7 @@ function BookingDialog(props: { draft: Draft; rooms: RoomDto[]; settings: RoomSe
         onSubmit={(e) => {
           e.preventDefault();
           void run(async () => {
-            const res = await api<{ booking: BookingDto }>("POST", "/rooms/bookings", { ...d, title, note: mode === "advanced" ? note : "" });
+            const res = await api<{ booking: BookingDto }>("POST", "/rooms/bookings", { ...d, title, note: mode === "advanced" ? note : "", participantIds });
             await props.onDone(res.booking);
           });
         }}
@@ -385,6 +388,15 @@ function BookingDialog(props: { draft: Draft; rooms: RoomDto[]; settings: RoomSe
           <label htmlFor="b-title">Judul</label>
           <input id="b-title" autoFocus required maxLength={120} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Misalnya: Rapat mingguan tim" />
         </div>
+        <div>
+          <label htmlFor="b-people">Peserta (opsional)</label>
+          <PeoplePicker id="b-people" value={participantIds} onChange={setParticipantIds} excludeId={me.user.id} />
+          {participantIds.length > room.capacity - 1 && (
+            <div className="small" style={{ color: "var(--warn)", marginTop: 4 }}>
+              Peserta dan pemesan ({participantIds.length + 1} orang) melebihi kapasitas ruangan ({room.capacity} orang).
+            </div>
+          )}
+        </div>
         {mode === "advanced" && (
           <div>
             <label htmlFor="b-note">Catatan</label>
@@ -404,11 +416,16 @@ function BookingDialog(props: { draft: Draft; rooms: RoomDto[]; settings: RoomSe
   );
 }
 
-function BookingDetail({ booking: b, onClose, onCancelled }: { booking: BookingDto; onClose: () => void; onCancelled: () => Promise<void> }) {
+function BookingDetail(props: { booking: BookingDto; onClose: () => void; onCancelled: () => Promise<void>; onChanged: () => Promise<void> }) {
+  const { onClose, onCancelled } = props;
   const me = useUser();
+  const [b, setB] = useState(props.booking);
   const [asking, setAsking] = useState(false);
+  const [editing, setEditing] = useState<string[] | null>(null);
   const { busy, error, run } = useAction();
-  const canCancel = b.status === "confirmed" && b.startAt * 1000 > Date.now() && (b.userId === me.user.id || me.user.role === "admin");
+  const mayChange = b.userId === me.user.id || me.user.role === "admin";
+  const canCancel = b.status === "confirmed" && b.startAt * 1000 > Date.now() && mayChange;
+  const canEditPeople = b.status === "confirmed" && b.endAt * 1000 > Date.now() && mayChange;
 
   return (
     <Modal title={b.title} onClose={onClose}>
@@ -417,9 +434,44 @@ function BookingDetail({ booking: b, onClose, onCancelled }: { booking: BookingD
         <dt>Ruangan</dt><dd>{b.roomName}</dd>
         <dt>Waktu</dt><dd>{fmtDate(b.date)}, {fmtMin(b.startMin)}–{fmtMin(b.endMin)}</dd>
         <dt>Pemesan</dt><dd>{b.userName}</dd>
+        <dt>Peserta</dt>
+        <dd>
+          {editing ? (
+            <PeoplePicker value={editing} onChange={setEditing} excludeId={b.userId} />
+          ) : (
+            <>
+              {peopleText(b.participants)}
+              {canEditPeople && (
+                <>
+                  {" "}
+                  <button className="ghost sm" onClick={() => setEditing(b.participants.map((p) => p.id))}>Ubah</button>
+                </>
+              )}
+            </>
+          )}
+        </dd>
         <dt>Status</dt><dd><StatusBadge status={b.status} /></dd>
         {b.note && <><dt>Catatan</dt><dd>{b.note}</dd></>}
       </dl>
+      {editing && (
+        <div className="row" style={{ marginBottom: 12 }}>
+          <button
+            className="primary sm"
+            disabled={busy}
+            onClick={() =>
+              run(async () => {
+                const res = await api<{ booking: BookingDto }>("PUT", `/rooms/bookings/${b.id}/participants`, { participantIds: editing });
+                setB(res.booking);
+                setEditing(null);
+                await props.onChanged();
+              })
+            }
+          >
+            {busy ? "Menyimpan…" : "Simpan peserta"}
+          </button>
+          <button className="sm" onClick={() => setEditing(null)}>Batal</button>
+        </div>
+      )}
       {asking && <div className="notice warn">Batalkan booking ini? Slotnya langsung bisa dipakai orang lain.</div>}
       <div className="foot">
         {canCancel && !asking && <button className="danger" onClick={() => setAsking(true)}>Batalkan booking</button>}
@@ -508,6 +560,7 @@ export function MyBookings() {
             await load();
             setToast("Booking dibatalkan.");
           }}
+          onChanged={load}
         />
       )}
       {toast && <div className="toast" role="status">{toast}</div>}

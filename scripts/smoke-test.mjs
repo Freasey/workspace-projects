@@ -144,6 +144,61 @@ check("waktu lampau ditolak", r.code === "IN_PAST");
 r = await adminA("GET", `/rooms/bookings?date=${day}`);
 check("daftar booking per tanggal", r.json.bookings.filter((b) => b.roomId === roomId).length === 3, String(r.json.bookings?.length));
 
+console.log("\nPeserta");
+r = await member("GET", "/rooms/people");
+check("daftar orang untuk peserta terbuka bagi user", r.status === 200 && r.json.people.some((p) => p.id === self) && !("email" in r.json.people[0]), JSON.stringify(r.json));
+r = await member("PUT", `/rooms/bookings/${bookingId}/participants`, { participantIds: [self, budiId, self] });
+check("pemesan mengatur peserta (diri sendiri dan ganda dibuang)", r.status === 200 && r.json.booking.participants.length === 1 && r.json.booking.participants[0].id === self, JSON.stringify(r.json));
+r = await member("PUT", `/rooms/bookings/${bookingId}/participants`, { participantIds: [citraId] });
+check("user nonaktif tidak bisa jadi peserta", r.code === "INVALID_PARTICIPANT", JSON.stringify(r.json));
+r = await member("PUT", `/rooms/bookings/${bookingId}/participants`, { participantIds: ["bukan-id"] });
+check("id asing ditolak", r.code === "INVALID_PARTICIPANT");
+r = await adminA("POST", "/rooms/bookings", { roomId, date: day, startMin: 14 * 60 + 15, endMin: 15 * 60 - 15, title: "Dengan peserta", participantIds: [budiId] });
+check("booking baru langsung dengan peserta", r.status === 201 && r.json.booking.participants[0]?.name === "Budi", JSON.stringify(r.json));
+const withPeople = r.json.booking.id;
+r = await adminA("GET", `/rooms/bookings?date=${day}`);
+check("peserta ikut di daftar booking", r.json.bookings.find((b) => b.id === withPeople)?.participants.length === 1);
+
+console.log("\nLayar ruangan");
+{
+  const screen = (method, path, body, token) =>
+    fetch(`${BASE}/api/v1${path}`, {
+      method,
+      headers: { "content-type": "application/json", ...(token ? { "x-display-token": token } : {}) },
+      body: method === "GET" ? undefined : JSON.stringify(body ?? {}),
+    }).then(async (res) => ({ status: res.status, json: await res.json().catch(() => ({})) }));
+  r = await member("POST", `/rooms/${roomId}/displays`, {});
+  check("user biasa tidak bisa membuat layar", r.status === 403);
+  r = await adminA("POST", `/rooms/${roomId}/displays`, { name: "Tablet pintu" });
+  check("admin membuat kode pemasangan", r.status === 201 && /^[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(r.json.code), JSON.stringify(r.json));
+  const code = r.json.code;
+  const displayId = r.json.display.id;
+  r = await screen("GET", "/display");
+  check("layar tanpa token ditolak", r.status === 401 && r.json.error?.code === "DISPLAY_UNPAIRED");
+  r = await screen("POST", "/display/pair", { code: "AAAA-AAAA" });
+  check("kode salah ditolak", r.json.error?.code === "BAD_CODE");
+  r = await screen("POST", "/display/pair", { code: code.toLowerCase().replace("-", " ") });
+  check("kode dipasang (huruf kecil dan spasi diterima)", r.status === 200 && r.json.token?.length === 64 && r.json.roomName === "Ruang Merapi", JSON.stringify(r.json));
+  const token = r.json.token;
+  r = await screen("POST", "/display/pair", { code });
+  check("kode hangus setelah dipakai", r.json.error?.code === "BAD_CODE");
+  r = await screen("GET", "/display", null, token);
+  check("layar membaca jadwal ruangannya", r.status === 200 && r.json.room.id === roomId && typeof r.json.now === "number" && r.json.blocked === null, JSON.stringify(r.json));
+  const next = r.json.later ?? r.json.bookings[0];
+  check("booking berikutnya beserta peserta", next?.id === bookingId && next.participants[0]?.id === self, JSON.stringify(next));
+  r = await adminA("GET", `/rooms/${roomId}/displays`);
+  check("admin melihat layar terpasang", r.json.displays.some((d) => d.id === displayId && d.pairedAt && d.lastSeenAt));
+  r = await sa("PUT", `/admin/orgs/${orgId}/modules/rooms`, { status: "paused", note: "Sedang perawatan" });
+  r = await screen("GET", "/display", null, token);
+  check("modul dijeda: layar menampilkan pesan jeda", r.status === 200 && r.json.blocked === "Sedang perawatan" && r.json.bookings.length === 0, JSON.stringify(r.json));
+  await sa("PUT", `/admin/orgs/${orgId}/modules/rooms`, { status: "active" });
+  r = await adminA("POST", `/rooms/displays/${displayId}/revoke`);
+  r = await screen("GET", "/display", null, token);
+  check("layar yang dicabut tidak bisa membaca lagi", r.status === 401);
+  r = await adminA("GET", `/rooms/${roomId}/displays`);
+  check("layar dicabut hilang dari daftar", !r.json.displays.some((d) => d.id === displayId));
+}
+
 console.log("\nJadwal, tanggal tutup, jeda");
 const narrow = [1, 2, 3, 4, 5].map((weekday) => ({ weekday, openMin: 600, closeMin: 1020, breakStart: 720, breakEnd: 780 }));
 r = await adminA("PUT", `/rooms/${roomId}/hours?preview=1`, { hours: narrow });

@@ -5,16 +5,21 @@ import {
   DEFAULT_HOURS,
   DEFAULT_SETTINGS,
   fmtMin,
+  MAX_PARTICIPANTS,
   SLOT_MINUTES,
   WEEKDAY_NAMES,
   type BookingDto,
   type ClosureDto,
+  type PersonDto,
+  type RoomDisplayCreated,
+  type RoomDisplayDto,
   type RoomDto,
   type RoomHour,
   type RoomSettings,
 } from "@app/shared";
 import * as s from "../db/schema";
 import { AppError, audit, parse, requireModule, type AppEnv, type Ctx, type UserAuth } from "../lib/context";
+import { randomCode, sha256 } from "../lib/crypto";
 import { daysBetween, epochToZoned, isValidDate, now, weekdayOf, zonedToEpoch } from "../lib/time";
 
 type RoomRow = typeof s.rooms.$inferSelect;
@@ -92,7 +97,60 @@ async function getSettings(c: Ctx, orgId: string): Promise<RoomSettings> {
     : DEFAULT_SETTINGS;
 }
 
-function toBookingDto(b: BookingRow, roomName: string, userName: string, tz: string): BookingDto {
+// D1 membatasi jumlah parameter per query, jadi daftar id dipecah.
+function chunks<T>(list: T[], size = 90): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
+}
+
+/** Peserta per booking, urut nama. */
+export async function participantsFor(c: Ctx, bookingIds: string[]): Promise<Map<string, PersonDto[]>> {
+  const map = new Map<string, PersonDto[]>();
+  for (const ids of chunks(bookingIds)) {
+    const rows = await c
+      .get("db")
+      .select({ bookingId: s.bookingParticipants.bookingId, id: s.users.id, name: s.users.name })
+      .from(s.bookingParticipants)
+      .innerJoin(s.users, eq(s.users.id, s.bookingParticipants.userId))
+      // User yang dinonaktifkan tidak lagi tampil sebagai peserta.
+      .where(and(inArray(s.bookingParticipants.bookingId, ids), eq(s.users.active, true)))
+      .orderBy(asc(s.users.name))
+      .all();
+    for (const { bookingId, ...p } of rows) map.set(bookingId, [...(map.get(bookingId) ?? []), p]);
+  }
+  return map;
+}
+
+/**
+ * Memeriksa calon peserta: harus user aktif di PT yang sama. Pemesan dan id ganda
+ * dibuang. Mengembalikan id yang valid.
+ */
+async function checkParticipants(c: Ctx, a: UserAuth, ids: string[], bookerId: string): Promise<string[]> {
+  const wanted = [...new Set(ids)].filter((id) => id !== bookerId);
+  if (!wanted.length) return [];
+  const found = new Set<string>();
+  for (const part of chunks(wanted)) {
+    const rows = await c
+      .get("db")
+      .select({ id: s.users.id })
+      .from(s.users)
+      .where(and(eq(s.users.orgId, a.org.id), eq(s.users.active, true), inArray(s.users.id, part)))
+      .all();
+    for (const r of rows) found.add(r.id);
+  }
+  if (found.size !== wanted.length) throw new AppError(400, "INVALID_PARTICIPANT", "Ada peserta yang bukan pengguna aktif di perusahaan ini.");
+  return wanted;
+}
+
+async function saveParticipants(c: Ctx, bookingId: string, userIds: string[]) {
+  await c.env.DB.batch([
+    c.env.DB.prepare("DELETE FROM booking_participants WHERE booking_id = ?").bind(bookingId),
+    ...userIds.map((u) => c.env.DB.prepare("INSERT INTO booking_participants (booking_id, user_id) VALUES (?, ?)").bind(bookingId, u)),
+  ]);
+}
+
+function toBookingDto(b: BookingRow, roomName: string, userName: string, tz: string, participants: PersonDto[] = []): BookingDto {
   const start = epochToZoned(b.startAt, tz);
   const end = epochToZoned(b.endAt, tz);
   return {
@@ -111,6 +169,7 @@ function toBookingDto(b: BookingRow, roomName: string, userName: string, tz: str
     endAt: b.endAt,
     // Tanpa proses terjadwal: status "selesai" dihitung saat dibaca.
     status: b.status === "confirmed" && b.endAt <= now() ? "completed" : b.status === "confirmed" ? "confirmed" : "cancelled",
+    participants,
   };
 }
 
@@ -124,7 +183,8 @@ async function listBookings(c: Ctx, a: UserAuth, where: ReturnType<typeof and>):
     .where(and(eq(s.bookings.orgId, a.org.id), where))
     .orderBy(asc(s.bookings.startAt))
     .all();
-  return rows.map((r) => toBookingDto(r.b, r.roomName, r.userName, a.org.timezone));
+  const people = await participantsFor(c, rows.map((r) => r.b.id));
+  return rows.map((r) => toBookingDto(r.b, r.roomName, r.userName, a.org.timezone, people.get(r.b.id)));
 }
 
 export const rooms = new Hono<AppEnv>();
@@ -137,6 +197,19 @@ rooms.get("/", async (c) => {
   const visible = a.user.role === "admin" ? rows : rows.filter((r) => r.active);
   const hours = await hoursFor(c, visible.map((r) => r.id));
   return c.json({ rooms: visible.map((r) => toRoomDto(r, hours.get(r.id) ?? [])), settings: await getSettings(c, a.org.id) });
+});
+
+// Daftar orang untuk memilih peserta. Terbuka untuk semua user modul, hanya nama.
+rooms.get("/people", async (c) => {
+  const a = await requireModule(c, "rooms");
+  const people = await c
+    .get("db")
+    .select({ id: s.users.id, name: s.users.name })
+    .from(s.users)
+    .where(and(eq(s.users.orgId, a.org.id), eq(s.users.active, true)))
+    .orderBy(asc(s.users.name))
+    .all();
+  return c.json({ people: people satisfies PersonDto[] });
 });
 
 rooms.post("/", async (c) => {
@@ -312,6 +385,7 @@ rooms.post("/bookings", async (c) => {
       endMin: slot,
       title: z.string().trim().min(1).max(120),
       note: z.string().trim().max(500).default(""),
+      participantIds: z.array(z.string()).max(MAX_PARTICIPANTS, `peserta paling banyak ${MAX_PARTICIPANTS} orang`).default([]),
     }),
   );
   const db = c.get("db");
@@ -367,6 +441,8 @@ rooms.post("/bookings", async (c) => {
     if (near) throw reject("BUFFER", `Ruangan ini butuh jeda ${room.bufferMin} menit dari booking lain.`);
   }
 
+  const participantIds = await checkParticipants(c, a, body.participantIds, a.user.id);
+
   const id = crypto.randomUUID();
   try {
     await db
@@ -380,6 +456,7 @@ rooms.post("/bookings", async (c) => {
     }
     throw err;
   }
+  if (participantIds.length) await saveParticipants(c, id, participantIds);
   await audit(c, a.org.id, "booking.create", `${room.name}, ${body.date} ${fmtMin(body.startMin)}–${fmtMin(body.endMin)}: ${body.title}`);
   const [booking] = await listBookings(c, a, eq(s.bookings.id, id));
   return c.json({ booking }, 201);
@@ -397,5 +474,92 @@ rooms.post("/bookings/:id/cancel", async (c) => {
   if (booking.startAt <= now()) throw new AppError(409, "ALREADY_STARTED", "Booking yang sudah mulai tidak bisa dibatalkan.");
   await db.update(s.bookings).set({ status: "cancelled", cancelledAt: now(), cancelledBy: a.user.id }).where(eq(s.bookings.id, booking.id)).run();
   await audit(c, a.org.id, "booking.cancel", booking.title);
+  return c.json({ ok: true });
+});
+
+// Mengganti daftar peserta. Boleh oleh pemesan atau admin, selama booking belum selesai.
+rooms.put("/bookings/:id/participants", async (c) => {
+  const a = await requireModule(c, "rooms");
+  const body = await parse(c, z.object({ participantIds: z.array(z.string()).max(MAX_PARTICIPANTS, `peserta paling banyak ${MAX_PARTICIPANTS} orang`) }));
+  const booking = await c.get("db").select().from(s.bookings).where(and(eq(s.bookings.id, c.req.param("id")), eq(s.bookings.orgId, a.org.id))).get();
+  if (!booking) throw new AppError(404, "NOT_FOUND", "Booking tidak ditemukan.");
+  if (booking.userId !== a.user.id && a.user.role !== "admin") {
+    throw new AppError(403, "FORBIDDEN", "Hanya pemesan atau admin yang bisa mengubah peserta.");
+  }
+  if (!HOLDING.includes(booking.status as (typeof HOLDING)[number])) throw new AppError(409, "NOT_ACTIVE", "Booking ini sudah tidak aktif.");
+  if (booking.endAt <= now()) throw new AppError(409, "ALREADY_ENDED", "Booking yang sudah selesai tidak bisa diubah.");
+  const ids = await checkParticipants(c, a, body.participantIds, booking.userId);
+  await saveParticipants(c, booking.id, ids);
+  await audit(c, a.org.id, "booking.participants", `${booking.title}: ${ids.length} peserta`);
+  const [dto] = await listBookings(c, a, eq(s.bookings.id, booking.id));
+  return c.json({ booking: dto });
+});
+
+// ---- Layar ruangan (dikelola admin) ----
+
+const PAIR_TTL = 15 * 60;
+
+function toDisplayDto(d: typeof s.roomDisplays.$inferSelect): RoomDisplayDto {
+  return {
+    id: d.id,
+    roomId: d.roomId,
+    name: d.name,
+    createdAt: d.createdAt,
+    pairedAt: d.pairedAt,
+    lastSeenAt: d.lastSeenAt,
+    pairExpiresAt: d.pairedAt ? null : d.pairExpiresAt,
+  };
+}
+
+rooms.get("/:id/displays", async (c) => {
+  const a = await requireModule(c, "rooms");
+  requireAdmin(a);
+  const room = await getRoom(c, a.org.id, c.req.param("id"));
+  const rows = await c
+    .get("db")
+    .select()
+    .from(s.roomDisplays)
+    .where(and(eq(s.roomDisplays.roomId, room.id), isNull(s.roomDisplays.revokedAt)))
+    .orderBy(asc(s.roomDisplays.createdAt))
+    .all();
+  // Kode yang kedaluwarsa tanpa pernah dipakai tidak perlu ditampilkan.
+  const live = rows.filter((d) => d.pairedAt || (d.pairExpiresAt ?? 0) > now());
+  return c.json({ displays: live.map(toDisplayDto) });
+});
+
+// Membuat layar baru beserta kode pemasangan sekali pakai (berlaku 15 menit).
+rooms.post("/:id/displays", async (c) => {
+  const a = await requireModule(c, "rooms");
+  requireAdmin(a);
+  const room = await getRoom(c, a.org.id, c.req.param("id"));
+  const body = await parse(c, z.object({ name: z.string().trim().max(60).default("") }));
+  const code = randomCode(8);
+  const row = {
+    id: crypto.randomUUID(),
+    orgId: a.org.id,
+    roomId: room.id,
+    name: body.name || `Layar ${room.name}`,
+    pairCodeHash: await sha256(code),
+    pairExpiresAt: now() + PAIR_TTL,
+    tokenHash: null,
+    createdBy: a.user.id,
+    createdAt: now(),
+    pairedAt: null,
+    lastSeenAt: null,
+    revokedAt: null,
+  };
+  await c.get("db").insert(s.roomDisplays).values(row).run();
+  await audit(c, a.org.id, "room.display.create", `${room.name}: ${row.name}`);
+  return c.json({ display: toDisplayDto(row), code: `${code.slice(0, 4)}-${code.slice(4)}` } satisfies RoomDisplayCreated, 201);
+});
+
+rooms.post("/displays/:displayId/revoke", async (c) => {
+  const a = await requireModule(c, "rooms");
+  requireAdmin(a);
+  const db = c.get("db");
+  const d = await db.select().from(s.roomDisplays).where(and(eq(s.roomDisplays.id, c.req.param("displayId")), eq(s.roomDisplays.orgId, a.org.id))).get();
+  if (!d) throw new AppError(404, "NOT_FOUND", "Layar tidak ditemukan.");
+  await db.update(s.roomDisplays).set({ revokedAt: now(), pairCodeHash: null }).where(eq(s.roomDisplays.id, d.id)).run();
+  await audit(c, a.org.id, "room.display.revoke", d.name);
   return c.json({ ok: true });
 });
