@@ -1,0 +1,149 @@
+# Membuat APK Android rilis yang ditandatangani keystore Spaces, lalu menggantikan
+# file unduhan di web (apps/web/public/download/spaces-android.apk).
+#
+# Dijalankan manual: Actions → "Rilis APK Android" → Run workflow, pilih branch dev.
+# Keystore dan password-nya hanya ada di GitHub Secrets (lihat apps/mobile/README.md).
+name: Rilis APK Android
+
+on:
+  workflow_dispatch:
+    inputs:
+      also_prod:
+        description: "Setelah APK masuk ke branch ini, gabungkan juga ke prod (memicu deploy produksi)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # Sidik jari sertifikat keystore Spaces (CN=Spaces, O=Worksell, C=ID). APK dengan
+      # tanda tangan lain tidak bisa memperbarui aplikasi yang sudah terpasang, jadi ditolak.
+      EXPECTED_CERT_SHA256: 09f5d6cea17128289d60b4678139e9bce43ace9b19fc52b93be9605cf6f67ada
+      APK_PATH: apps/web/public/download/spaces-android.apk
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Siapkan keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.SPACES_UPLOAD_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.SPACES_UPLOAD_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SPACES_UPLOAD_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.SPACES_UPLOAD_KEY_PASSWORD }}
+        run: |
+          # Tanpa keystore, build jatuh ke kunci debug. Itu tidak boleh sampai ke user.
+          for name in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Secret untuk $name belum diisi. Lihat bagian 'Rilis lewat GitHub Actions' di apps/mobile/README.md."
+              exit 1
+            fi
+          done
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/spaces-upload.jks"
+          {
+            echo "SPACES_UPLOAD_STORE_FILE=$RUNNER_TEMP/spaces-upload.jks"
+            echo "SPACES_UPLOAD_STORE_PASSWORD=$STORE_PASSWORD"
+            echo "SPACES_UPLOAD_KEY_ALIAS=$KEY_ALIAS"
+            echo "SPACES_UPLOAD_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Pasang dependensi
+        working-directory: apps/mobile
+        run: npm ci
+
+      - name: Periksa tipe
+        working-directory: apps/mobile
+        run: npm run typecheck
+
+      - name: Build APK
+        working-directory: apps/mobile
+        run: npm run apk
+
+      - name: Periksa tanda tangan dan ukuran
+        run: |
+          apk=apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$apksigner" verify --print-certs "$apk" | tee "$RUNNER_TEMP/certs.txt"
+          if ! grep -qi "certificate SHA-256 digest: $EXPECTED_CERT_SHA256" "$RUNNER_TEMP/certs.txt"; then
+            echo "::error::APK tidak ditandatangani keystore Spaces. Periksa secret keystore."
+            exit 1
+          fi
+          size=$(stat -c %s "$apk")
+          # Cloudflare menolak file statis di atas 25 MiB.
+          if [ "$size" -ge 26214400 ]; then
+            echo "::error::APK $size byte, melebihi batas Cloudflare 25 MiB."
+            exit 1
+          fi
+          cp "$apk" "$APK_PATH"
+
+      - name: Perbarui info rilis di halaman utama
+        run: |
+          node - <<'EOF'
+          const fs = require("fs");
+          const app = JSON.parse(fs.readFileSync("apps/mobile/app.json", "utf8")).expo;
+          const sizeMb = Math.round(fs.statSync(process.env.APK_PATH).size / 1048576);
+          const released = new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Jakarta" });
+          const file = "apps/web/src/release.ts";
+          let src = fs.readFileSync(file, "utf8");
+          src = src
+            .replace(/version: "[^"]*"/, `version: "${app.version}"`)
+            .replace(/sizeMb: \d+/, `sizeMb: ${sizeMb}`)
+            .replace(/released: "[^"]*"/, `released: "${released}"`);
+          fs.writeFileSync(file, src);
+          console.log(`Versi ${app.version} (versionCode ${app.android.versionCode}), ${sizeMb} MB, ${released}`);
+          EOF
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spaces-android
+          path: ${{ env.APK_PATH }}
+          retention-days: 30
+
+      - name: Commit APK ke branch ini
+        run: |
+          version=$(node -p 'require("./apps/mobile/app.json").expo.version')
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$APK_PATH" apps/web/src/release.ts
+          if git diff --cached --quiet; then
+            echo "Tidak ada perubahan untuk di-commit."
+          else
+            git commit -m "Rilis APK Android $version"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+
+      - name: Gabungkan ke prod
+        if: ${{ inputs.also_prod && github.ref_name != 'prod' }}
+        run: |
+          version=$(node -p 'require("./apps/mobile/app.json").expo.version')
+          git fetch origin prod
+          git checkout -B prod origin/prod
+          git merge --no-ff "origin/${GITHUB_REF_NAME}" -m "Rilis: APK Android $version" || {
+            echo "::error::prod tidak bisa digabung otomatis. Gabungkan manual."
+            exit 1
+          }
+          git push origin prod
+
+      - name: Hapus keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/spaces-upload.jks"
