@@ -147,23 +147,23 @@ export interface RoomDisplayDto {
   roomId: string;
   name: string;
   createdAt: number;
-  /** Null selama kode pemasangan belum dipakai. */
   pairedAt: number | null;
   lastSeenAt: number | null;
-  /** Kode pemasangan masih berlaku sampai waktu ini (hanya sebelum dipasang). */
-  pairExpiresAt: number | null;
 }
 
-/** Hasil membuat layar: kode pemasangan hanya dikirim sekali. */
-export interface RoomDisplayCreated {
-  display: RoomDisplayDto;
-  code: string;
-}
-
-export interface DisplayPairResult {
+/**
+ * Tablet/TV yang belum terpasang meminta kode ini, lalu menampilkannya sebagai QR
+ * dan teks. Tokennya disimpan perangkat dan baru berlaku setelah admin PT
+ * menghubungkan kode itu ke sebuah ruangan.
+ */
+export interface DisplayRequestResult {
   token: string;
-  roomName: string;
+  code: string;
+  expiresAt: number;
 }
+
+/** Status perangkat yang sedang menunggu dihubungkan admin. */
+export type DisplayStatus = { state: "pending"; expiresAt: number } | { state: "paired"; roomName: string };
 
 export interface DisplayBooking {
   id: string;
@@ -271,12 +271,13 @@ export function displayState(feed: DisplayFeed, now: number): DisplayState {
 export const displayClock = (feed: DisplayFeed, now: number) => fmtMin(((Math.floor((now - feed.dayStart) / 60) % 1440) + 1440) % 1440);
 
 // ---- QR pemasangan layar ----
-// QR berisi alamat /layar dengan kode di bagian hash (#kode=...). Bagian hash
-// tidak pernah dikirim ke server, jadi kode tidak tercatat di log. Dipindai
-// dengan kamera bawaan, alamat itu langsung membuka dan memasang layar web;
-// aplikasi mobile membaca kode yang sama dari QR lewat pemindainya sendiri.
+// Tablet/TV di depan ruangan menampilkan QR berisi alamat /layar/hubungkan dengan
+// kode di bagian hash (#kode=...). Admin PT memindainya dari HP yang sudah login:
+// dengan kamera bawaan, alamat itu membuka web di halaman Kelola ruangan; dengan
+// aplikasi Spaces, pemindainya membaca kode yang sama. Bagian hash tidak pernah
+// dikirim ke server, jadi kode tidak tercatat di log.
 
-export const pairingUrl = (origin: string, code: string) => `${origin.replace(/\/+$/, "")}/layar#kode=${encodeURIComponent(code)}`;
+export const pairingUrl = (origin: string, code: string) => `${origin.replace(/\/+$/, "")}/layar/hubungkan#kode=${encodeURIComponent(code)}`;
 
 /** Mengambil kode pemasangan dari isi QR (alamat /layar#kode=…) atau dari kode yang diketik. Null kalau tidak dikenali. */
 export function parsePairingCode(text: string): string | null {

@@ -6,10 +6,11 @@ import { parsePairingCode } from "@app/shared";
 import { Button } from "./ui";
 
 /**
- * Pemindai QR pemasangan layar, layar penuh. Isi QR adalah alamat /layar#kode=…;
- * yang diteruskan hanya kodenya. QR lain diabaikan dengan pesan.
+ * Pemindai QR layar ruangan, layar penuh. Dipakai admin untuk memindai QR yang
+ * tampil di tablet/TV (alamat /layar/hubungkan#kode=…); yang diteruskan hanya
+ * kodenya. QR lain diabaikan dengan pesan.
  */
-export function QrScanner({ onCode, onClose }: { onCode: (code: string) => void; onClose: () => void }) {
+export function QrScanner({ onCode, onClose, title = "Pindai QR" }: { onCode: (code: string) => void; onClose: () => void; title?: string }) {
   const insets = useSafeAreaInsets();
   const [permission, request] = useCameraPermissions();
   const [hint, setHint] = useState<string | null>(null);
@@ -24,7 +25,7 @@ export function QrScanner({ onCode, onClose }: { onCode: (code: string) => void;
     body = (
       <View style={{ gap: 14, alignItems: "stretch", width: "100%", maxWidth: 360 }}>
         <Text style={{ color: "#fff", fontSize: 16, textAlign: "center" }}>
-          Izinkan kamera untuk memindai QR pemasangan dari admin PT. Kamera hanya dipakai di layar ini.
+          Izinkan kamera untuk memindai QR yang tampil di layar ruangan. Kamera hanya dipakai di sini.
         </Text>
         {permission.canAskAgain ? (
           <Button kind="primary" label="Izinkan kamera" onPress={() => void request()} />
@@ -48,7 +49,7 @@ export function QrScanner({ onCode, onClose }: { onCode: (code: string) => void;
               onCode(code);
             } else if (data !== lastBad.current) {
               lastBad.current = data;
-              setHint("Ini bukan QR pemasangan layar Spaces. Pindai QR dari menu Kelola ruangan → Layar ruangan.");
+              setHint("Ini bukan QR layar ruangan Spaces. Pindai QR yang tampil di tablet atau TV yang akan dipasang.");
             }
           }}
         />
@@ -62,7 +63,7 @@ export function QrScanner({ onCode, onClose }: { onCode: (code: string) => void;
       <View style={{ flex: 1, backgroundColor: "#000", alignItems: "center", justifyContent: "center", padding: 24 }}>
         {body}
         <View style={{ position: "absolute", left: 16, right: 16, top: insets.top + 16, alignItems: "center" }}>
-          <Text style={{ color: "#fff", fontSize: 17, fontWeight: "700", textShadowColor: "#000", textShadowRadius: 4 }}>Pindai QR pemasangan layar</Text>
+          <Text style={{ color: "#fff", fontSize: 17, fontWeight: "700", textShadowColor: "#000", textShadowRadius: 4 }}>{title}</Text>
         </View>
         <View style={{ position: "absolute", left: 16, right: 16, bottom: insets.bottom + 16, gap: 10 }}>
           {!!hint && (

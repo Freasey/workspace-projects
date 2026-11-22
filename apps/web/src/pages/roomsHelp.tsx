@@ -213,7 +213,7 @@ export function RoomsHelp() {
 
       <Topic id="layar" title="Layar ruangan">
         <p>
-          Tablet atau HP yang dipasang di depan pintu bisa menjadi <strong>layar ruangan</strong>. Layar menampilkan status ruangan dengan warna yang
+          Tablet atau TV yang dipasang di depan pintu bisa menjadi <strong>layar ruangan</strong>. Layar menampilkan status ruangan dengan warna yang
           terbaca dari jauh, jadwal hari ini, hitung mundur, dan daftar peserta.
         </p>
         <div className="table-wrap">
@@ -228,10 +228,16 @@ export function RoomsHelp() {
           </table>
         </div>
         <ol style={{ marginTop: 12 }}>
-          <li>Admin PT membuka {isAdmin ? <Link to="/rooms/manage">Kelola ruangan</Link> : "Kelola ruangan"}, memilih ruangan, lalu menekan <strong>Buat QR dan kode</strong> di bagian Layar ruangan.</li>
-          <li>Pindai QR dengan kamera tablet atau HP yang akan dipasang. Peramban terbuka dan layar langsung terpasang.</li>
-          <li>Di aplikasi Android: halaman masuk → <strong>Pasang sebagai layar ruangan</strong> → <strong>Pindai QR</strong>.</li>
-          <li>Tanpa kamera: buka alamat <strong>/layar</strong> lalu ketik kodenya. QR dan kode berlaku 15 menit dan hanya untuk satu perangkat.</li>
+          <li>
+            Di tablet atau TV yang akan dipasang, buka alamat <strong>/layar</strong> di peramban, atau di aplikasi Android: halaman masuk →{" "}
+            <strong>Pasang sebagai layar ruangan</strong>. Layarnya menampilkan QR dan kode.
+          </li>
+          <li>
+            Admin PT memindai QR itu dengan HP yang sudah masuk ke Spaces: pakai kamera HP (membuka {isAdmin ? <Link to="/rooms/manage">Kelola ruangan</Link> : "Kelola ruangan"}), atau
+            aplikasi Spaces → Akun → <strong>Hubungkan layar ruangan</strong>.
+          </li>
+          <li>Pilih ruangannya, lalu tekan <strong>Hubungkan</strong>. Layar langsung berganti ke jadwal ruangan itu.</li>
+          <li>Tanpa kamera: ketik kode yang tampil di layar pada Kelola ruangan → Layar ruangan. Kode berlaku 15 menit dan diganti otomatis oleh layar.</li>
         </ol>
         <ul>
           <li>Layar tidak memakai akun siapa pun dan hanya bisa membaca jadwal satu ruangan. Admin bisa mencabutnya kapan saja dari Kelola ruangan.</li>

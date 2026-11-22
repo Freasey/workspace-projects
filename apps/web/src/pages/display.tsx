@@ -5,18 +5,23 @@ import {
   displayState,
   fmtCountdown,
   fmtMin,
-  parsePairingCode,
+  pairingUrl,
   type DisplayBooking,
   type DisplayFeed,
-  type DisplayPairResult,
+  type DisplayRequestResult,
+  type DisplayStatus,
 } from "@app/shared";
 import { msg } from "../api";
+import { QrCode } from "../components/qr";
 import { Brand } from "../components/ui";
 
 // Token layar disimpan di perangkat ini saja. Bukan sesi user: tidak bisa dipakai
 // untuk membuka aplikasi, hanya untuk membaca jadwal satu ruangan.
 const TOKEN_KEY = "display_token";
 const POLL_MS = 30_000;
+// Selama QR tampil, status ditanya sering supaya layar berganti begitu admin selesai.
+const STATUS_MS = 3_000;
+const RETRY_MS = 15_000;
 
 export const displayToken = {
   get(): string | null {
@@ -68,47 +73,18 @@ async function call<T>(method: "GET" | "POST", path: string, token: string | nul
   return json as T;
 }
 
-/** Memasang perangkat ini dengan kode dari admin, lalu menyimpan tokennya. */
-export async function pairThisDevice(code: string): Promise<DisplayPairResult> {
-  const res = await call<DisplayPairResult>("POST", "/pair", null, { code });
-  displayToken.set(res.token);
-  return res;
-}
-
-/** Kode dari QR (/layar#kode=…). Hash langsung dihapus supaya tidak tertinggal di riwayat atau terbagi ulang. */
-function takeCodeFromUrl(): string | null {
-  const m = window.location.hash.match(/kode=([^&]+)/);
-  if (!m) return null;
-  window.history.replaceState(null, "", window.location.pathname);
-  return parsePairingCode(decodeURIComponent(m[1]!)) ?? decodeURIComponent(m[1]!);
-}
+/** Meminta kode pemasangan untuk perangkat ini. Token baru berlaku setelah admin menghubungkannya. */
+export const requestDisplayCode = (previous: string | null) => call<DisplayRequestResult>("POST", "/request", previous);
 
 export function DisplayPage() {
   const [token, setToken] = useState(() => displayToken.get());
   const [notice, setNotice] = useState<string | null>(null);
-  // Dibaca sekali saat halaman dibuka dari QR. Kalau perangkat sudah terpasang, kode baru menggantikannya.
-  const [qrCode, setQrCode] = useState(takeCodeFromUrl);
-  useEffect(() => {
-    const onHash = () => {
-      const code = takeCodeFromUrl();
-      if (code) setQrCode(code);
-    };
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
+  const paired = useCallback((t: string) => {
+    displayToken.set(t);
+    setNotice(null);
+    setToken(t);
   }, []);
-  if (!token || qrCode) {
-    return (
-      <PairScreen
-        notice={notice}
-        autoCode={qrCode}
-        onBack={token ? () => setQrCode(null) : undefined}
-        onPaired={(t) => {
-          setQrCode(null);
-          setToken(t);
-        }}
-      />
-    );
-  }
+  if (!token) return <PairScreen notice={notice} onPaired={paired} />;
   return (
     <DisplayScreen
       token={token}
@@ -121,72 +97,97 @@ export function DisplayPage() {
   );
 }
 
-function PairScreen(props: { notice: string | null; autoCode: string | null; onPaired: (token: string) => void; onBack?: () => void }) {
-  const { notice, onPaired } = props;
-  const [code, setCode] = useState(props.autoCode ?? "");
-  const [busy, setBusy] = useState(false);
+/**
+ * Perangkat yang belum terpasang menampilkan QR dan kode. Admin PT memindainya dari
+ * HP yang sudah login lalu memilih ruangan; layar ini menanyakan statusnya berkala
+ * dan langsung berganti ke jadwal begitu dihubungkan. Kode diperbarui sendiri saat hangus.
+ */
+function PairScreen({ notice, onPaired }: { notice: string | null; onPaired: (token: string) => void }) {
+  const [req, setReq] = useState<DisplayRequestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const pair = useCallback(
-    (value: string) => {
-      setBusy(true);
+  const last = useRef<string | null>(null);
+  useWakeLock();
+
+  const fetchCode = useCallback(async () => {
+    try {
+      const r = await requestDisplayCode(last.current);
+      last.current = r.token;
+      setReq(r);
       setError(null);
-      pairThisDevice(value)
-        .then((r) => onPaired(r.token))
-        .catch((err) => setError(`${msg(err)}`))
-        .finally(() => setBusy(false));
-    },
-    [onPaired],
-  );
-  // Dibuka dari QR: langsung dipasang tanpa perlu menekan apa pun.
-  const auto = useRef(props.autoCode);
+    } catch (e) {
+      setError(msg(e));
+    }
+  }, []);
+
   useEffect(() => {
-    if (auto.current) pair(auto.current);
-    auto.current = null;
-  }, [pair]);
+    void fetchCode();
+  }, [fetchCode]);
+
+  useEffect(() => {
+    // Gagal meminta kode (jaringan, batas per IP): coba lagi sebentar lagi.
+    if (!req) {
+      const retry = setInterval(() => void fetchCode(), RETRY_MS);
+      return () => clearInterval(retry);
+    }
+    let stop = false;
+    const check = async () => {
+      try {
+        const st = await call<DisplayStatus>("GET", "/status", req.token);
+        if (stop) return;
+        if (st.state === "paired") onPaired(req.token);
+        setError(null);
+      } catch (e) {
+        if (stop) return;
+        if (e instanceof DisplayErr && e.code === "DISPLAY_UNPAIRED") void fetchCode();
+        else setError(msg(e));
+      }
+    };
+    const poll = setInterval(() => void check(), STATUS_MS);
+    const onVisible = () => document.visibilityState === "visible" && void check();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      stop = true;
+      clearInterval(poll);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [req, fetchCode, onPaired]);
+
   return (
     <div className="disp-pair">
-      <form
-        className="disp-pair-card stack"
-        onSubmit={(e) => {
-          e.preventDefault();
-          pair(code);
-        }}
-      >
-        <Brand />
-        <h1>Pasang layar ruangan</h1>
-        <p className="muted" style={{ margin: 0 }}>
-          Perangkat ini akan menampilkan jadwal hari ini, hitung mundur, dan peserta untuk satu ruangan. Minta QR atau kode pemasangan ke admin PT
-          (menu Kelola ruangan → Layar ruangan). Memindai QR dengan kamera perangkat ini langsung memasangnya; kode di bawah untuk perangkat tanpa kamera.
-        </p>
-        {props.autoCode && busy && <div className="notice">Memasang dari QR…</div>}
-        {notice && <div className="notice warn">{notice}</div>}
-        {error && <div className="notice error" role="alert">{error}</div>}
-        <div>
-          <label htmlFor="pair-code">Kode pemasangan</label>
-          <input
-            id="pair-code"
-            className="disp-code-input"
-            required
-            autoFocus
-            autoComplete="off"
-            autoCapitalize="characters"
-            spellCheck={false}
-            maxLength={12}
-            placeholder="ABCD-2345"
-            value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
-          />
+      <div className="disp-pair-card disp-wait">
+        <div className="disp-wait-qr">
+          {req ? (
+            <QrCode value={pairingUrl(window.location.origin, req.code)} size={320} label={`Kode QR pemasangan layar ${req.code}`} />
+          ) : (
+            <div className="disp-wait-blank">{error ? "Tidak bisa meminta kode" : "Memuat kode…"}</div>
+          )}
         </div>
-        <button className="primary" disabled={busy}>{busy ? "Memasang…" : "Pasang"}</button>
-        {props.onBack && (
-          <button type="button" onClick={props.onBack} style={{ width: "100%" }}>
-            Kembali ke layar yang sudah terpasang
-          </button>
-        )}
-        <div className="small muted">
-          Bukan layar ruangan? <Link to="/login">Masuk ke aplikasi</Link>
+        <div className="stack">
+          <Brand />
+          <h1 style={{ margin: 0 }}>Hubungkan layar ini ke ruangan</h1>
+          {notice && <div className="notice warn">{notice}</div>}
+          {error && <div className="notice error" role="alert">{error} Mencoba lagi…</div>}
+          <ol className="disp-wait-steps">
+            <li>
+              Admin PT memindai QR ini dengan HP yang sudah masuk ke Spaces: pakai kamera HP, atau aplikasi Spaces → <b>Akun</b> → <b>Hubungkan layar ruangan</b>.
+            </li>
+            <li>Pilih ruangan yang akan ditampilkan di layar ini.</li>
+            <li>Layar ini langsung menampilkan jadwal ruangannya.</li>
+          </ol>
+          <div>
+            <div className="small muted">Tanpa kamera? Buka Kelola ruangan → Layar ruangan, lalu ketik kode:</div>
+            <div className="disp-layar-code num">{req?.code ?? "····-····"}</div>
+            {req && (
+              <div className="small muted">
+                Berlaku sampai {new Date(req.expiresAt * 1000).toLocaleTimeString("id-ID", { timeStyle: "short" })}, lalu diganti otomatis.
+              </div>
+            )}
+          </div>
+          <div className="small muted">
+            Bukan layar ruangan? <Link to="/login">Masuk ke aplikasi</Link>
+          </div>
         </div>
-      </form>
+      </div>
     </div>
   );
 }
@@ -357,7 +358,7 @@ function DisplayScreen({ token, onUnpaired }: { token: string; onUnpaired: (why:
           <div className="dialog" role="dialog" aria-modal="true" aria-label="Keluar dari mode layar">
             <h2>Keluar dari mode layar?</h2>
             <p className="muted">
-              Perangkat ini berhenti menampilkan jadwal {feed.room.name} dan tautannya dicabut. Untuk memasang lagi, admin PT perlu membuat kode baru.
+              Perangkat ini berhenti menampilkan jadwal {feed.room.name} dan tautannya dicabut. Untuk memasangnya lagi, layar akan menampilkan QR baru yang perlu dipindai admin PT.
             </p>
             <div className="foot">
               <button onClick={() => setMenu(false)}>Batal</button>

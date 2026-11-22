@@ -136,16 +136,16 @@ Menunggu persetujuan → Terkonfirmasi → Check-in → Selesai, dengan cabang D
 
 ### Layar ruangan
 
-Perangkat (tablet, HP, atau peramban) yang dipasang di depan satu ruangan dan menampilkan status, jadwal hari ini, hitung mundur, dan peserta. Web di `/layar`; aplikasi mobile lewat "Pasang sebagai layar ruangan" di halaman masuk.
+Perangkat (tablet, TV, atau peramban) yang dipasang di depan satu ruangan dan menampilkan status, jadwal hari ini, hitung mundur, dan peserta. Web di `/layar`; aplikasi mobile lewat "Pasang sebagai layar ruangan" di halaman masuk.
 
-- Admin PT membuat QR dan kode pemasangan per ruangan dari Kelola ruangan. Kode 8 karakter, ditampilkan sekali, disimpan sebagai hash, berlaku 15 menit, dan hangus setelah dipakai satu perangkat.
-- QR berisi alamat `/layar#kode=XXXX-XXXX` (kode yang sama). Kode ditaruh di bagian hash supaya tidak terkirim ke server atau tercatat di log. Dipindai dengan kamera bawaan, peramban membuka `/layar`, langsung memasang, lalu menghapus hash dari alamat. Aplikasi mobile punya pemindai QR sendiri (expo-camera) yang hanya mengambil kodenya dan menolak QR lain. Mengetik kode tetap tersedia untuk perangkat tanpa kamera.
-- QR baru di perangkat yang sudah terpasang menggantikan pemasangan lama kalau berhasil; kalau gagal, layar lama bisa dipakai kembali.
+- Perangkat yang belum terpasang (tablet/TV) meminta kode ke server lalu menampilkannya sebagai QR dan teks. Kode 8 karakter, disimpan sebagai hash, berlaku 15 menit, dan diganti otomatis oleh perangkat saat hangus. Permintaan kode tanpa login dibatasi 20 kode aktif per IP.
+- Admin PT memindai QR itu dari HP yang sudah login: dengan kamera bawaan (QR berisi `/layar/hubungkan#kode=XXXX-XXXX`, membuka Kelola ruangan di web, lewat halaman masuk kalau belum login), atau dari aplikasi Spaces → Akun → Hubungkan layar ruangan (pemindai expo-camera yang menolak QR lain). Admin memilih ruangan lalu menekan Hubungkan. Tanpa kamera, kode bisa diketik di Kelola ruangan → Layar ruangan.
+- Kode ditaruh di bagian hash supaya tidak terkirim ke server atau tercatat di log; web menghapusnya dari alamat setelah dibaca. Kode hangus setelah dipakai satu kali. Percobaan kode salah dibatasi per admin: 5 kali gagal, lalu jeda 15 menit.
+- Perangkat menanyakan status setiap 3 detik selama QR tampil dan langsung berganti ke jadwal begitu dihubungkan. Token perangkat dibuat saat meminta kode dan baru berlaku setelah dihubungkan.
 - Perangkat menerima token layar sendiri (header `X-Display-Token`), bukan sesi user. Token hanya bisa membaca jadwal ruangan itu dan tidak kedaluwarsa sampai dicabut admin atau perangkat keluar dari mode layar.
-- Percobaan kode dibatasi per alamat IP seperti login: 5 kali gagal, lalu jeda 15 menit.
 - Status dihitung di perangkat dari waktu server: Sedang dipakai (ada booking berjalan, hitung mundur ke akhir), Segera dipakai (booking mulai dalam 10 menit), Tersedia (buka dan kosong), Tutup (di luar jam buka, istirahat, atau tanggal tutup). Selain saat dipakai, hitung mundur menuju booking berikutnya, termasuk dari hari lain sampai 14 hari ke depan.
 - Perangkat membaca ulang setiap 30 detik dan saat booking mulai atau selesai. Kalau koneksi putus, data terakhir tetap tampil dengan penanda.
-- Modul dijeda, PT di-suspend, atau ruangan nonaktif: layar menampilkan "Tidak tersedia" beserta catatannya. PT diarsipkan atau layar dicabut: perangkat kembali ke form kode.
+- Modul dijeda, PT di-suspend, atau ruangan nonaktif: layar menampilkan "Tidak tersedia" beserta catatannya. PT diarsipkan atau layar dicabut: perangkat kembali menampilkan QR baru.
 - Judul booking, nama pemesan, dan nama peserta terlihat oleh siapa pun yang lewat di depan layar.
 
 ### Kasus tepi

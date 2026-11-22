@@ -3,7 +3,8 @@ import { ScrollView, View } from "react-native";
 import appConfig from "../../app.json";
 import { SERVER, useAuth, useUser } from "../api";
 import { useTheme } from "../theme";
-import { Badge, Button, Card, DetailRow, Txt } from "../ui";
+import { ConnectDisplaySheet } from "../connectDisplay";
+import { Badge, Button, Card, DetailRow, Notice, Txt } from "../ui";
 import { ChangePasswordCard } from "./Auth";
 
 /** Ditampilkan sebagai tab pertama saat tidak ada modul yang bisa dibuka. */
@@ -42,6 +43,9 @@ export function Account() {
   const [changing, setChanging] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const isAdmin = me.user.role === "admin";
+  const roomsOn = me.modules.some((m) => m.key === "rooms" && m.status === "active");
+  const [connecting, setConnecting] = useState(false);
+  const [connected, setConnected] = useState<string | null>(null);
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }} keyboardShouldPersistTaps="handled">
@@ -59,10 +63,35 @@ export function Account() {
         <DetailRow label="Peran">{isAdmin ? "Admin PT" : "User"}</DetailRow>
       </Card>
 
+      {!!connected && <Notice tone="ok" text={connected} />}
+      {isAdmin && roomsOn && (
+        <Card style={{ gap: 10 }}>
+          <Txt variant="heading">Layar ruangan</Txt>
+          <Txt muted>Pindai QR yang tampil di tablet atau TV depan ruangan untuk menjadikannya layar jadwal ruangan itu.</Txt>
+          <Button
+            testID="open-connect-display"
+            kind="primary"
+            label="Hubungkan layar ruangan"
+            onPress={() => {
+              setConnected(null);
+              setConnecting(true);
+            }}
+          />
+        </Card>
+      )}
       {isAdmin && (
         <Card>
           <Txt muted>Kelola ruangan, jadwal, aturan booking, dan pengguna tersedia di versi web.</Txt>
         </Card>
+      )}
+      {connecting && (
+        <ConnectDisplaySheet
+          onClose={() => setConnecting(false)}
+          onDone={(m) => {
+            setConnecting(false);
+            setConnected(m);
+          }}
+        />
       )}
 
       {!me.impersonated &&

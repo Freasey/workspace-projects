@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import type { Me } from "@app/shared";
 import { api, ApiErr, AuthContext, useAuth } from "./api";
 import { Brand } from "./components/ui";
@@ -11,6 +11,7 @@ import { Landing } from "./pages/landing";
 import { MyBookings, RoomsBooking } from "./pages/rooms";
 import { RoomsHelp } from "./pages/roomsHelp";
 import { RoomsManage } from "./pages/roomsManage";
+import { pendingDisplay } from "./pendingDisplay";
 
 export function App() {
   const [me, setMe] = useState<Me | null>(null);
@@ -47,11 +48,18 @@ export function App() {
         <Route path="/" element={<Landing />} />
         {/* Layar ruangan: perangkat di depan ruangan, tanpa login user. */}
         <Route path="/layar" element={<DisplayPage />} />
+        {/* Dibuka dari QR di layar ruangan, dengan HP admin. Kodenya diteruskan ke Kelola ruangan. */}
+        <Route path="/layar/hubungkan" element={<ConnectFromQr />} />
         <Route path="/login" element={me ? <Navigate to={me.kind === "superadmin" ? "/admin" : "/rooms"} replace /> : <Login />} />
         <Route path="*" element={!me ? <Navigate to="/login" replace /> : me.kind === "superadmin" ? <AdminApp email={me.email} /> : <UserApp me={me} />} />
       </Routes>
     </AuthContext.Provider>
   );
+}
+
+function ConnectFromQr() {
+  pendingDisplay.takeFromUrl();
+  return <Navigate to="/rooms/manage" replace />;
 }
 
 type NavItem =
@@ -125,9 +133,33 @@ function AdminApp({ email }: { email: string }) {
 
 function UserApp({ me }: { me: Extract<Me, { kind: "user" }> }) {
   const { logout } = useAuth();
-  const banner = me.impersonated ? (
-    <div className="banner">Anda masuk sebagai {me.user.name} ({me.user.email}) dengan kunci sekali pakai. Sesi berakhir otomatis dalam 1 jam.</div>
-  ) : undefined;
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const [qrNotice, setQrNotice] = useState<string | null>(null);
+  const canManage = me.user.role === "admin" && me.org.status === "active" && me.modules.some((m) => m.key === "rooms" && m.status === "active");
+  // QR layar dipindai sebelum masuk: setelah login, lanjutkan ke Kelola ruangan.
+  useEffect(() => {
+    if (!pendingDisplay.get() || pathname === "/rooms/manage") return;
+    if (canManage) navigate("/rooms/manage");
+    else {
+      pendingDisplay.clear();
+      setQrNotice("Layar ruangan hanya bisa dihubungkan oleh admin PT. Minta admin PT Anda memindai QR di layar itu.");
+    }
+  }, [canManage, pathname, navigate]);
+  const banner =
+    me.impersonated || qrNotice ? (
+      <>
+        {me.impersonated && (
+          <div className="banner">Anda masuk sebagai {me.user.name} ({me.user.email}) dengan kunci sekali pakai. Sesi berakhir otomatis dalam 1 jam.</div>
+        )}
+        {qrNotice && (
+          <div className="banner">
+            {qrNotice}{" "}
+            <button className="ghost sm" onClick={() => setQrNotice(null)}>Tutup</button>
+          </div>
+        )}
+      </>
+    ) : undefined;
 
   if (me.org.status !== "active") {
     return (

@@ -2,15 +2,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useKeepAwake } from "expo-keep-awake";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { displayClock, displayState, fmtCountdown, fmtMin, type DisplayBooking, type DisplayFeed, type DisplayTone } from "@app/shared";
-import { ApiErr, display, msg } from "../api";
+import { displayClock, displayState, fmtCountdown, fmtMin, pairingUrl, type DisplayBooking, type DisplayFeed, type DisplayRequestResult, type DisplayTone } from "@app/shared";
+import { ApiErr, display, msg, SERVER } from "../api";
 import { fmtDate, fmtDateShort } from "../date";
-import { QrScanner } from "../scan";
+import { QrCode } from "../qr";
 import { useTheme } from "../theme";
-import { Button, ErrorNote, Field, Input, Notice, Txt, useAction } from "../ui";
-import { AuthLayout } from "./Auth";
+import { Button, Notice, Txt, useAction } from "../ui";
 
 const POLL_MS = 30_000;
+// Selama QR tampil, status ditanya sering supaya layar berganti begitu admin selesai.
+const STATUS_MS = 3_000;
+const RETRY_MS = 15_000;
 
 // Warna status sama dengan versi web (/layar). Layar selalu gelap.
 const TONES: Record<DisplayTone, [string, string]> = {
@@ -21,59 +23,126 @@ const TONES: Record<DisplayTone, [string, string]> = {
 };
 const DARK = { bg: "#0d1117", card: "#161d26", ink: "#eef2f6", muted: "#aeb9c5", faint: "#7f8b98", chip: "#2a3440" };
 
-/** Memasang perangkat ini sebagai layar ruangan dengan kode dari admin PT. */
+/**
+ * Perangkat yang belum terpasang menampilkan QR dan kode. Admin PT memindainya dari
+ * HP yang sudah login (aplikasi Spaces → Akun → Hubungkan layar ruangan, atau kamera
+ * HP) lalu memilih ruangan. Layar ini menanyakan statusnya berkala dan langsung
+ * berganti ke jadwal begitu dihubungkan. Kode diperbarui sendiri saat hangus.
+ */
 export function PairDisplay({ notice, onPaired, onBack }: { notice?: string | null; onPaired: () => void; onBack: () => void }) {
-  const [code, setCode] = useState("");
-  const [scanning, setScanning] = useState(false);
-  const { busy, error, run, setError } = useAction();
-  const pair = (value: string) =>
-    void run(async () => {
-      await display.pair(value);
-      onPaired();
-    });
-  const submit = () => {
-    if (!code.trim()) return setError("Isi kode pemasangan.");
-    pair(code);
-  };
-  return (
-    <AuthLayout>
-      <View style={{ gap: 4 }}>
-        <Txt variant="title" accessibilityRole="header">Pasang layar ruangan</Txt>
-        <Txt muted>
-          Perangkat ini akan menampilkan jadwal hari ini, hitung mundur, dan peserta untuk satu ruangan. Minta QR atau kode pemasangan ke admin PT (web:
-          Kelola ruangan → Layar ruangan).
-        </Txt>
-      </View>
+  useKeepAwake();
+  const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const wide = width > height && width >= 700;
+  const [req, setReq] = useState<DisplayRequestResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const last = useRef<string | null>(null);
+
+  const fetchCode = useCallback(async () => {
+    try {
+      const r = await display.request(last.current);
+      last.current = r.token;
+      setReq(r);
+      setError(null);
+    } catch (e) {
+      setError(msg(e));
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchCode();
+  }, [fetchCode]);
+
+  useEffect(() => {
+    if (!req) {
+      const retry = setInterval(() => void fetchCode(), RETRY_MS);
+      return () => clearInterval(retry);
+    }
+    let stop = false;
+    const check = async () => {
+      try {
+        const st = await display.status(req.token);
+        if (stop) return;
+        setError(null);
+        if (st.state === "paired") {
+          stop = true;
+          await display.adopt(req.token);
+          onPaired();
+        }
+      } catch (e) {
+        if (stop) return;
+        if (e instanceof ApiErr && e.code === "DISPLAY_UNPAIRED") void fetchCode();
+        else setError(msg(e));
+      }
+    };
+    const poll = setInterval(() => void check(), STATUS_MS);
+    const sub = AppState.addEventListener("change", (s) => s === "active" && void check());
+    return () => {
+      stop = true;
+      clearInterval(poll);
+      sub.remove();
+    };
+  }, [req, fetchCode, onPaired]);
+
+  const qrSize = Math.min(wide ? height * 0.62 : width * 0.72, 380);
+  const text = (
+    <View style={{ gap: 14, flex: wide ? 1 : undefined, maxWidth: 460 }}>
+      <Text style={{ color: DARK.ink, fontSize: 26, fontWeight: "800" }} accessibilityRole="header">
+        Hubungkan layar ini ke ruangan
+      </Text>
       {!!notice && <Notice tone="warn" text={notice} />}
-      <ErrorNote error={error} />
-      <Button testID="pair-scan" kind="primary" label={busy ? "Memasang…" : "Pindai QR"} busy={busy} onPress={() => setScanning(true)} />
-      <Txt variant="small" muted style={{ textAlign: "center" }}>atau ketik kodenya</Txt>
-      <Field label="Kode pemasangan">
-        <Input
-          testID="pair-code"
-          value={code}
-          onChangeText={(v) => setCode(v.toUpperCase())}
-          autoCapitalize="characters"
-          autoCorrect={false}
-          maxLength={12}
-          placeholder="ABCD-2345"
-          onSubmitEditing={submit}
-          style={{ fontSize: 24, letterSpacing: 4, textAlign: "center", fontVariant: ["tabular-nums"] }}
-        />
-      </Field>
-      <Button testID="pair-submit" label="Pasang dengan kode" disabled={busy} onPress={submit} />
-      <Button kind="ghost" label="Kembali ke halaman masuk" onPress={onBack} />
-      {scanning && (
-        <QrScanner
-          onClose={() => setScanning(false)}
-          onCode={(scanned) => {
-            setScanning(false);
-            setCode(scanned);
-            pair(scanned);
-          }}
-        />
+      {!!error && <Notice tone="bad" text={`${error} Mencoba lagi…`} />}
+      <View style={{ gap: 6 }}>
+        {[
+          "Admin PT memindai QR ini dari HP: aplikasi Spaces → Akun → Hubungkan layar ruangan, atau kamera HP.",
+          "Pilih ruangan yang akan ditampilkan di layar ini.",
+          "Layar ini langsung menampilkan jadwal ruangannya.",
+        ].map((line, i) => (
+          <Text key={i} style={{ color: DARK.muted, fontSize: 16, lineHeight: 22 }}>
+            {i + 1}. {line}
+          </Text>
+        ))}
+      </View>
+      <View style={{ gap: 2 }}>
+        <Text style={{ color: DARK.faint, fontSize: 14 }}>Tanpa kamera? Ketik kode ini di web: Kelola ruangan → Layar ruangan</Text>
+        <Text testID="pair-code" style={{ color: DARK.ink, fontSize: 40, fontWeight: "800", letterSpacing: 4, fontVariant: ["tabular-nums"] }}>
+          {req?.code ?? "····-····"}
+        </Text>
+        {!!req && (
+          <Text style={{ color: DARK.faint, fontSize: 14 }}>
+            Berlaku sampai {new Date(req.expiresAt * 1000).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}, lalu diganti otomatis.
+          </Text>
+        )}
+      </View>
+      <Pressable accessibilityRole="button" onPress={onBack} hitSlop={8} style={{ alignSelf: "flex-start", paddingVertical: 8 }}>
+        <Text style={{ color: DARK.muted, fontSize: 15, fontWeight: "600", textDecorationLine: "underline" }}>Bukan layar ruangan? Kembali ke halaman masuk</Text>
+      </Pressable>
+    </View>
+  );
+
+  return (
+    <ScrollView
+      style={{ flex: 1, backgroundColor: DARK.bg }}
+      contentContainerStyle={{
+        flexGrow: 1,
+        justifyContent: "center",
+        alignItems: wide ? "center" : "stretch",
+        flexDirection: wide ? "row" : "column",
+        gap: wide ? 48 : 24,
+        padding: 24,
+        paddingTop: insets.top + 24,
+        paddingBottom: insets.bottom + 24,
+      }}
+    >
+      {req ? (
+        <QrCode value={pairingUrl(SERVER, req.code)} size={qrSize} label={`Kode QR pemasangan layar ${req.code}`} />
+      ) : (
+        <View style={{ width: qrSize, height: qrSize, borderRadius: 12, backgroundColor: DARK.card, alignSelf: "center", alignItems: "center", justifyContent: "center" }}>
+          <Text style={{ color: DARK.muted }}>{error ? "Tidak bisa meminta kode" : "Memuat kode…"}</Text>
+        </View>
       )}
-    </AuthLayout>
+      {text}
+    </ScrollView>
   );
 }
 
@@ -315,8 +384,8 @@ function ExitDialog(props: { visible: boolean; roomName: string | null; onCancel
         <View style={{ backgroundColor: t.surface, borderRadius: 16, padding: 20, gap: 14, width: "100%", maxWidth: 420 }}>
           <Txt variant="heading">Keluar dari mode layar?</Txt>
           <Txt muted>
-            Perangkat ini berhenti menampilkan jadwal{props.roomName ? ` ${props.roomName}` : ""} dan tautannya dicabut. Untuk memasang lagi, admin PT perlu
-            membuat kode baru.
+            Perangkat ini berhenti menampilkan jadwal{props.roomName ? ` ${props.roomName}` : ""} dan tautannya dicabut. Untuk memasangnya lagi, layar
+            menampilkan QR baru yang perlu dipindai admin PT.
           </Txt>
           <View style={{ flexDirection: "row", gap: 10 }}>
             <Button label="Batal" onPress={props.onCancel} style={{ flex: 1 }} />

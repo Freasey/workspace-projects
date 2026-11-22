@@ -51,6 +51,15 @@ export const masterKeys = sqliteTable("master_keys", {
   revokedAt: integer("revoked_at"),
 });
 
+export const displayRequests = sqliteTable("display_requests", {
+  id: text("id").primaryKey(),
+  codeHash: text("code_hash").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  ip: text("ip").notNull(),
+  createdAt: integer("created_at").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+});
+
 export const orgModules = sqliteTable(
   "org_modules",
   {
