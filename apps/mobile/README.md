@@ -59,7 +59,7 @@ EXPO_PUBLIC_API_URL=http://10.0.2.2:8787 npm run android
 
 ## Rilis lewat GitHub Actions (disarankan)
 
-Workflow `.github/workflows/android-release.yml` membuat APK bertanda tangan keystore Spaces, memeriksa sidik jari sertifikatnya, lalu meng-commit APK dan info rilis (`apps/web/src/release.ts`) ke branch yang dipilih. Deploy web berjalan seperti biasa dari commit itu.
+Workflow `.github/workflows/android-release.yml` membuat APK bertanda tangan keystore Spaces, memeriksa sidik jari sertifikatnya, lalu mengunggahnya ke **Vercel Blob**. Alamat Blob itu ditulis ke info rilis (`apps/web/src/release.ts`, dipakai tombol unduh di halaman utama) dan ke `apps/web/public/_redirects`, supaya alamat lama `https://spaces.worksell.id/download/spaces-android.apk` tetap mengarah ke APK terbaru. Hanya kedua file itu yang di-commit ke branch yang dipilih; APK tidak disimpan di git. Deploy web berjalan seperti biasa dari commit itu.
 
 **Sekali saja: isi GitHub Secrets.** Di GitHub: repo → Settings → Secrets and variables → Actions → New repository secret.
 
@@ -69,16 +69,18 @@ Workflow `.github/workflows/android-release.yml` membuat APK bertanda tangan key
 | `SPACES_UPLOAD_STORE_PASSWORD` | Password keystore |
 | `SPACES_UPLOAD_KEY_ALIAS` | Alias kunci |
 | `SPACES_UPLOAD_KEY_PASSWORD` | Password kunci |
+| `BLOB_READ_WRITE_TOKEN` | Token baca-tulis Vercel Blob store (Vercel → Storage → store → Settings/.env.local). Store harus mengizinkan akses **public**, karena APK diunduh tanpa login. |
 
 **Setiap rilis:**
 
 1. Naikkan `version` dan `android.versionCode` di `app.json`, commit ke `dev`.
 2. GitHub → Actions → **Rilis APK Android** → Run workflow → branch `dev`. Centang "gabungkan juga ke prod" kalau langsung dirilis ke produksi.
-3. Workflow gagal dengan pesan jelas kalau secret belum diisi, kalau APK ditandatangani kunci lain, atau kalau ukurannya melebihi 25 MiB. APK tidak pernah sampai ke web dalam keadaan itu.
+3. Workflow gagal dengan pesan jelas kalau secret belum diisi, kalau APK ditandatangani kunci lain, atau kalau unggahan ke Blob gagal. APK tidak pernah sampai ke web dalam keadaan itu.
+4. Tiap rilis mendapat alamat Blob sendiri (nama berisi versi plus akhiran acak), jadi cache tidak pernah menyajikan APK lama. File rilis lama tetap ada di Blob; hapus manual dari dashboard Vercel kalau perlu.
 
 ## Merilis APK baru secara manual
 
-APK dibagikan langsung dari situs, di `https://spaces.worksell.id/download/spaces-android.apk`, dengan tombol unduh di halaman utama.
+Hanya kalau GitHub Actions tidak bisa dipakai.
 
 1. Naikkan `version` dan `android.versionCode` di `app.json`. `versionCode` wajib lebih besar dari rilis sebelumnya, kalau tidak ponsel menolak memasang pembaruan.
 2. Siapkan keystore rilis (lihat bagian berikut), lalu build:
@@ -87,11 +89,11 @@ APK dibagikan langsung dari situs, di `https://spaces.worksell.id/download/space
    npm run apk
    ```
 
-3. Salin `android/app/build/outputs/apk/release/app-release.apk` ke `apps/web/public/download/spaces-android.apk`.
-4. Perbarui `apps/web/src/release.ts` (versi, ukuran, tanggal).
+3. Unggah `android/app/build/outputs/apk/release/app-release.apk` ke Vercel Blob (public), misalnya lewat dashboard Vercel.
+4. Isi alamatnya di `apps/web/src/release.ts` (beserta versi, ukuran, tanggal) dan di `apps/web/public/_redirects`.
 5. Commit, lalu deploy seperti biasa (branch `prod`).
 
-APK hanya berisi arsitektur `arm64-v8a`, yang dipakai hampir semua ponsel Android sejak 2017. Alasannya, Cloudflare membatasi file statis maksimal 25 MiB; APK dengan arsitektur 32-bit ikut berukuran sekitar 32 MB.
+APK hanya berisi arsitektur `arm64-v8a`, yang dipakai hampir semua ponsel Android sejak 2017, dan pustaka native disimpan terkompresi (`plugins/withSmallApk.js`) supaya unduhannya kecil.
 
 ## Keystore rilis
 

@@ -1,8 +1,9 @@
-# Membuat APK Android rilis yang ditandatangani keystore Spaces, lalu menggantikan
-# file unduhan di web (apps/web/public/download/spaces-android.apk).
+# Membuat APK Android rilis yang ditandatangani keystore Spaces, mengunggahnya ke
+# Vercel Blob, lalu mengarahkan tombol unduh di web (dan alamat lama
+# /download/spaces-android.apk) ke file itu. APK tidak lagi disimpan di git.
 #
 # Dijalankan manual: Actions → "Rilis APK Android" → Run workflow, pilih branch dev.
-# Keystore dan password-nya hanya ada di GitHub Secrets (lihat apps/mobile/README.md).
+# Keystore, password-nya, dan token Blob hanya ada di GitHub Secrets (lihat apps/mobile/README.md).
 name: Rilis APK Android
 
 on:
@@ -28,7 +29,9 @@ jobs:
       # Sidik jari sertifikat keystore Spaces (CN=Spaces, O=Worksell, C=ID). APK dengan
       # tanda tangan lain tidak bisa memperbarui aplikasi yang sudah terpasang, jadi ditolak.
       EXPECTED_CERT_SHA256: 09f5d6cea17128289d60b4678139e9bce43ace9b19fc52b93be9605cf6f67ada
-      APK_PATH: apps/web/public/download/spaces-android.apk
+      APK_BUILT: apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+      # APK lama yang dulu ikut di-commit; dihapus dari repo setelah rilis lewat Blob.
+      OLD_APK: apps/web/public/download/spaces-android.apk
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,9 +54,10 @@ jobs:
           STORE_PASSWORD: ${{ secrets.SPACES_UPLOAD_STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.SPACES_UPLOAD_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.SPACES_UPLOAD_KEY_PASSWORD }}
+          BLOB_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
         run: |
           # Tanpa keystore, build jatuh ke kunci debug. Itu tidak boleh sampai ke user.
-          for name in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+          for name in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD BLOB_TOKEN; do
             if [ -z "${!name}" ]; then
               echo "::error::Secret untuk $name belum diisi. Lihat bagian 'Rilis lewat GitHub Actions' di apps/mobile/README.md."
               exit 1
@@ -79,52 +83,56 @@ jobs:
         working-directory: apps/mobile
         run: npm run apk
 
-      - name: Periksa tanda tangan dan ukuran
+      - name: Periksa tanda tangan
         run: |
-          apk=apps/mobile/android/app/build/outputs/apk/release/app-release.apk
           apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
-          "$apksigner" verify --print-certs "$apk" | tee "$RUNNER_TEMP/certs.txt"
+          "$apksigner" verify --print-certs "$APK_BUILT" | tee "$RUNNER_TEMP/certs.txt"
           if ! grep -qi "certificate SHA-256 digest: $EXPECTED_CERT_SHA256" "$RUNNER_TEMP/certs.txt"; then
             echo "::error::APK tidak ditandatangani keystore Spaces. Periksa secret keystore."
             exit 1
           fi
-          size=$(stat -c %s "$apk")
-          # Cloudflare menolak file statis di atas 25 MiB.
-          if [ "$size" -ge 26214400 ]; then
-            echo "::error::APK $size byte, melebihi batas Cloudflare 25 MiB."
-            exit 1
-          fi
-          cp "$apk" "$APK_PATH"
+
+      - name: Unggah APK ke Vercel Blob
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+        run: |
+          npm install --silent --no-save --no-package-lock --prefix "$RUNNER_TEMP/blob" @vercel/blob@2.8.2
+          node .github/scripts/upload-apk.cjs
 
       - name: Perbarui info rilis di halaman utama
         run: |
           node - <<'EOF'
           const fs = require("fs");
           const app = JSON.parse(fs.readFileSync("apps/mobile/app.json", "utf8")).expo;
-          const sizeMb = Math.round(fs.statSync(process.env.APK_PATH).size / 1048576);
+          const url = process.env.APK_URL;
+          const sizeMb = Math.round(fs.statSync(process.env.APK_BUILT).size / 1048576);
           const released = new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Jakarta" });
           const file = "apps/web/src/release.ts";
           let src = fs.readFileSync(file, "utf8");
           src = src
             .replace(/version: "[^"]*"/, `version: "${app.version}"`)
+            .replace(/url: "[^"]*"/, `url: "${url}"`)
             .replace(/sizeMb: \d+/, `sizeMb: ${sizeMb}`)
             .replace(/released: "[^"]*"/, `released: "${released}"`);
           fs.writeFileSync(file, src);
+          // Alamat lama yang mungkin sudah tersebar tetap jalan: dialihkan ke APK terbaru.
+          fs.writeFileSync("apps/web/public/_redirects", `/download/spaces-android.apk ${url} 302\n`);
           console.log(`Versi ${app.version} (versionCode ${app.android.versionCode}), ${sizeMb} MB, ${released}`);
           EOF
 
       - uses: actions/upload-artifact@v4
         with:
           name: spaces-android
-          path: ${{ env.APK_PATH }}
+          path: ${{ env.APK_BUILT }}
           retention-days: 30
 
-      - name: Commit APK ke branch ini
+      - name: Commit info rilis ke branch ini
         run: |
           version=$(node -p 'require("./apps/mobile/app.json").expo.version')
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "$APK_PATH" apps/web/src/release.ts
+          git rm -q --ignore-unmatch "$OLD_APK"
+          git add apps/web/src/release.ts apps/web/public/_redirects
           if git diff --cached --quiet; then
             echo "Tidak ada perubahan untuk di-commit."
           else
