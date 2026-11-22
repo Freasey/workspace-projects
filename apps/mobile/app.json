@@ -33,7 +33,8 @@
           "recordAudioAndroid": false
         }
       ],
-      "./plugins/withReleaseSigning.js"
+      "./plugins/withReleaseSigning.js",
+      "./plugins/withSmallApk.js"
     ]
   }
 }
