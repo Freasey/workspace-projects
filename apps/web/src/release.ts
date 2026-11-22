@@ -1,5 +1,6 @@
 // Rilis aplikasi mobile yang ditawarkan di halaman utama.
-// Saat merilis APK baru: ganti file di public/download/, lalu perbarui nilai di sini.
+// Diperbarui otomatis oleh workflow "Rilis APK Android": APK diunggah ke Vercel Blob
+// dan alamatnya ditulis di sini (lihat apps/mobile/README.md).
 export const ANDROID_RELEASE = {
   version: "1.1.0",
   url: "/download/spaces-android.apk",
