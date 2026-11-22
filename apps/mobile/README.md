@@ -57,7 +57,26 @@ Jalankan API lokal dari akar repo (`pnpm dev`), lalu dari emulator Android (komp
 EXPO_PUBLIC_API_URL=http://10.0.2.2:8787 npm run android
 ```
 
-## Merilis APK baru
+## Rilis lewat GitHub Actions (disarankan)
+
+Workflow `.github/workflows/android-release.yml` membuat APK bertanda tangan keystore Spaces, memeriksa sidik jari sertifikatnya, lalu meng-commit APK dan info rilis (`apps/web/src/release.ts`) ke branch yang dipilih. Deploy web berjalan seperti biasa dari commit itu.
+
+**Sekali saja: isi GitHub Secrets.** Di GitHub: repo → Settings → Secrets and variables → Actions → New repository secret.
+
+| Nama secret | Isi |
+|---|---|
+| `SPACES_UPLOAD_KEYSTORE_BASE64` | File `.jks` dalam base64: `base64 -w0 spaces-upload.jks` (Linux) atau `base64 -i spaces-upload.jks` (macOS) |
+| `SPACES_UPLOAD_STORE_PASSWORD` | Password keystore |
+| `SPACES_UPLOAD_KEY_ALIAS` | Alias kunci |
+| `SPACES_UPLOAD_KEY_PASSWORD` | Password kunci |
+
+**Setiap rilis:**
+
+1. Naikkan `version` dan `android.versionCode` di `app.json`, commit ke `dev`.
+2. GitHub → Actions → **Rilis APK Android** → Run workflow → branch `dev`. Centang "gabungkan juga ke prod" kalau langsung dirilis ke produksi.
+3. Workflow gagal dengan pesan jelas kalau secret belum diisi, kalau APK ditandatangani kunci lain, atau kalau ukurannya melebihi 25 MiB. APK tidak pernah sampai ke web dalam keadaan itu.
+
+## Merilis APK baru secara manual
 
 APK dibagikan langsung dari situs, di `https://spaces.worksell.id/download/spaces-android.apk`, dengan tombol unduh di halaman utama.
 
