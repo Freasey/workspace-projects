@@ -6,12 +6,12 @@ import {
   DEFAULT_SETTINGS,
   fmtMin,
   MAX_PARTICIPANTS,
+  parsePairingCode,
   SLOT_MINUTES,
   WEEKDAY_NAMES,
   type BookingDto,
   type ClosureDto,
   type PersonDto,
-  type RoomDisplayCreated,
   type RoomDisplayDto,
   type RoomDto,
   type RoomHour,
@@ -19,7 +19,8 @@ import {
 } from "@app/shared";
 import * as s from "../db/schema";
 import { AppError, audit, parse, requireModule, type AppEnv, type Ctx, type UserAuth } from "../lib/context";
-import { randomCode, sha256 } from "../lib/crypto";
+import { normalizeCode, sha256 } from "../lib/crypto";
+import { assertNotLocked, recordFailure } from "./auth";
 import { daysBetween, epochToZoned, isValidDate, now, weekdayOf, zonedToEpoch } from "../lib/time";
 
 type RoomRow = typeof s.rooms.$inferSelect;
@@ -497,18 +498,8 @@ rooms.put("/bookings/:id/participants", async (c) => {
 
 // ---- Layar ruangan (dikelola admin) ----
 
-const PAIR_TTL = 15 * 60;
-
 function toDisplayDto(d: typeof s.roomDisplays.$inferSelect): RoomDisplayDto {
-  return {
-    id: d.id,
-    roomId: d.roomId,
-    name: d.name,
-    createdAt: d.createdAt,
-    pairedAt: d.pairedAt,
-    lastSeenAt: d.lastSeenAt,
-    pairExpiresAt: d.pairedAt ? null : d.pairExpiresAt,
-  };
+  return { id: d.id, roomId: d.roomId, name: d.name, createdAt: d.createdAt, pairedAt: d.pairedAt, lastSeenAt: d.lastSeenAt };
 }
 
 rooms.get("/:id/displays", async (c) => {
@@ -522,35 +513,56 @@ rooms.get("/:id/displays", async (c) => {
     .where(and(eq(s.roomDisplays.roomId, room.id), isNull(s.roomDisplays.revokedAt)))
     .orderBy(asc(s.roomDisplays.createdAt))
     .all();
-  // Kode yang kedaluwarsa tanpa pernah dipakai tidak perlu ditampilkan.
-  const live = rows.filter((d) => d.pairedAt || (d.pairExpiresAt ?? 0) > now());
-  return c.json({ displays: live.map(toDisplayDto) });
+  return c.json({ displays: rows.map(toDisplayDto) });
 });
 
-// Membuat layar baru beserta kode pemasangan sekali pakai (berlaku 15 menit).
+/**
+ * Menghubungkan tablet/TV ke ruangan ini dengan kode yang tampil di layarnya
+ * (dipindai dari QR atau diketik). Perangkat langsung beralih ke jadwal ruangan.
+ */
 rooms.post("/:id/displays", async (c) => {
   const a = await requireModule(c, "rooms");
   requireAdmin(a);
   const room = await getRoom(c, a.org.id, c.req.param("id"));
-  const body = await parse(c, z.object({ name: z.string().trim().max(60).default("") }));
-  const code = randomCode(8);
+  const body = await parse(c, z.object({ code: z.string().min(1).max(200), name: z.string().trim().max(60).default("") }));
+  const lockKey = `display-claim|${a.user.id}`;
+  await assertNotLocked(c, lockKey);
+
+  const db = c.get("db");
+  const code = parsePairingCode(body.code);
+  const req = code
+    ? await db
+        .select()
+        .from(s.displayRequests)
+        .where(and(eq(s.displayRequests.codeHash, await sha256(normalizeCode(code))), gt(s.displayRequests.expiresAt, now())))
+        .get()
+    : undefined;
+  if (!req) {
+    await recordFailure(c, lockKey);
+    throw new AppError(400, "BAD_CODE", "Kode tidak dikenal atau sudah kedaluwarsa. Periksa kode di layar, atau muat ulang layarnya untuk kode baru.");
+  }
+  // Kode hangus begitu dipakai. Hanya satu admin yang berhasil menghapusnya.
+  const del = await db.delete(s.displayRequests).where(eq(s.displayRequests.id, req.id)).run();
+  if (!del.meta.changes) throw new AppError(400, "BAD_CODE", "Kode ini baru saja dipakai.");
+  await db.delete(s.loginAttempts).where(eq(s.loginAttempts.key, lockKey)).run();
+
   const row = {
     id: crypto.randomUUID(),
     orgId: a.org.id,
     roomId: room.id,
     name: body.name || `Layar ${room.name}`,
-    pairCodeHash: await sha256(code),
-    pairExpiresAt: now() + PAIR_TTL,
-    tokenHash: null,
+    pairCodeHash: null,
+    pairExpiresAt: null,
+    tokenHash: req.tokenHash,
     createdBy: a.user.id,
     createdAt: now(),
-    pairedAt: null,
+    pairedAt: now(),
     lastSeenAt: null,
     revokedAt: null,
   };
-  await c.get("db").insert(s.roomDisplays).values(row).run();
-  await audit(c, a.org.id, "room.display.create", `${room.name}: ${row.name}`);
-  return c.json({ display: toDisplayDto(row), code: `${code.slice(0, 4)}-${code.slice(4)}` } satisfies RoomDisplayCreated, 201);
+  await db.insert(s.roomDisplays).values(row).run();
+  await audit(c, a.org.id, "room.display.pair", `${room.name}: ${row.name}`);
+  return c.json({ display: toDisplayDto(row) }, 201);
 });
 
 rooms.post("/displays/:displayId/revoke", async (c) => {

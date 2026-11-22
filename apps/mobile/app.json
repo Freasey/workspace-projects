@@ -29,7 +29,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Kamera dipakai untuk memindai QR pemasangan layar ruangan.",
+          "cameraPermission": "Kamera dipakai untuk memindai QR di tablet atau TV saat menghubungkannya sebagai layar ruangan.",
           "recordAudioAndroid": false
         }
       ],

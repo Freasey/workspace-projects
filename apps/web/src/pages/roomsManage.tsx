@@ -3,19 +3,17 @@ import { useNavigate } from "react-router-dom";
 import {
   DEFAULT_HOURS,
   fmtMin,
-  pairingUrl,
   WEEKDAY_NAMES,
   type BookingDto,
   type ClosureDto,
-  type RoomDisplayCreated,
   type RoomDisplayDto,
   type RoomDto,
   type RoomHour,
   type RoomSettings,
 } from "@app/shared";
 import { api, fmtDateTime, msg, todayIn, useUser } from "../api";
-import { QrCode } from "../components/qr";
-import { pairThisDevice } from "./display";
+import { pendingDisplay } from "../pendingDisplay";
+import { displayToken, requestDisplayCode } from "./display";
 import { ErrorNote, ModeTabs, Section, TimeSelect, useAction, useMode } from "../components/ui";
 
 // Senin lebih dulu, Minggu terakhir.
@@ -66,6 +64,10 @@ export function RoomsManage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", capacity: 6, location: "" });
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Kode dari QR layar yang dipindai HP admin, menunggu dipilihkan ruangannya.
+  const [qrCode, setQrCode] = useState(() => pendingDisplay.get());
+  const [connected, setConnected] = useState<string | null>(null);
+  const [displaysRev, setDisplaysRev] = useState(0);
   const { busy, error, run } = useAction();
 
   const load = useCallback(async () => {
@@ -94,6 +96,59 @@ export function RoomsManage() {
         </div>
       </div>
       <ErrorNote error={loadError ?? error} />
+      {qrCode && (
+        <div className="notice">
+          <div className="spread">
+            <strong>Layar dengan kode {qrCode} menunggu dihubungkan</strong>
+            <button
+              className="ghost sm"
+              onClick={() => {
+                pendingDisplay.clear();
+                setQrCode(null);
+              }}
+            >
+              Batal
+            </button>
+          </div>
+          <p style={{ margin: "6px 0 10px" }}>Pilih ruangan yang akan ditampilkan di layar itu.</p>
+          {rooms.length === 0 ? (
+            <span className="small">Belum ada ruangan. Tambahkan ruangan dulu di bawah.</span>
+          ) : (
+            <div className="row">
+              {rooms.map((r) => (
+                <button key={r.id} className={selected === r.id ? "primary" : ""} onClick={() => setSelected(r.id)}>
+                  {r.name}
+                  {!r.active && " (nonaktif)"}
+                </button>
+              ))}
+            </div>
+          )}
+          {room && (
+            <button
+              className="primary"
+              style={{ marginTop: 12, width: "100%" }}
+              disabled={busy}
+              onClick={() =>
+                void run(async () => {
+                  const res = await api<{ display: RoomDisplayDto }>("POST", `/rooms/${room.id}/displays`, { code: qrCode });
+                  pendingDisplay.clear();
+                  setQrCode(null);
+                  setConnected(`${res.display.name} terhubung. Layarnya berganti ke jadwal ${room.name} dalam beberapa detik.`);
+                  setDisplaysRev((n) => n + 1);
+                })
+              }
+            >
+              Hubungkan ke {room.name}
+            </button>
+          )}
+        </div>
+      )}
+      {connected && (
+        <div className="notice ok spread">
+          <span>{connected}</span>
+          <button className="ghost sm" onClick={() => setConnected(null)}>Tutup</button>
+        </div>
+      )}
 
       <Section title="Ruangan">
         <form
@@ -141,7 +196,7 @@ export function RoomsManage() {
         <>
           <RoomData key={`d-${room.id}`} room={room} onSaved={load} />
           <RoomSchedule key={`s-${room.id}`} room={room} closures={closures} onSaved={load} />
-          <RoomDisplays key={`l-${room.id}`} room={room} />
+          <RoomDisplays key={`l-${room.id}-${displaysRev}`} room={room} />
         </>
       )}
 
@@ -480,14 +535,16 @@ function Limits({ settings, onSaved }: EditorProps & { settings: RoomSettings })
 }
 
 /**
- * Layar ruangan: tablet atau HP di depan pintu yang menampilkan jadwal hari ini,
- * hitung mundur, dan peserta. Dipasang dengan kode sekali pakai.
+ * Layar ruangan: tablet atau TV di depan pintu yang menampilkan jadwal hari ini,
+ * hitung mundur, dan peserta. Perangkatnya menampilkan QR dan kode; admin
+ * menghubungkannya di sini (kode dari QR yang dipindai HP, atau diketik).
  */
 function RoomDisplays({ room }: { room: RoomDto }) {
   const navigate = useNavigate();
   const [list, setList] = useState<RoomDisplayDto[] | null>(null);
+  const [code, setCode] = useState("");
   const [name, setName] = useState("");
-  const [created, setCreated] = useState<RoomDisplayCreated | null>(null);
+  const [done, setDone] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
   const { busy, error, run } = useAction();
 
@@ -498,85 +555,77 @@ function RoomDisplays({ room }: { room: RoomDto }) {
     void run(load);
   }, [load]);
 
-  const create = () =>
-    api<RoomDisplayCreated>("POST", `/rooms/${room.id}/displays`, { name: name.trim() });
+  const connect = (value: string) => api<{ display: RoomDisplayDto }>("POST", `/rooms/${room.id}/displays`, { code: value, name: name.trim() });
 
   const status = (d: RoomDisplayDto) =>
-    !d.pairedAt ? (
-      <span className="badge warn">Menunggu dipasang, kode berlaku sampai {new Date(d.pairExpiresAt! * 1000).toLocaleTimeString("id-ID", { timeStyle: "short" })}</span>
-    ) : d.lastSeenAt && Date.now() / 1000 - d.lastSeenAt < 5 * 60 ? (
+    d.lastSeenAt && Date.now() / 1000 - d.lastSeenAt < 5 * 60 ? (
       <span className="badge ok">Aktif</span>
     ) : (
-      <span className="badge">Terakhir aktif {d.lastSeenAt ? fmtDateTime(d.lastSeenAt) : "—"}</span>
+      <span className="badge">{d.lastSeenAt ? `Terakhir aktif ${fmtDateTime(d.lastSeenAt)}` : "Belum pernah aktif"}</span>
     );
 
   return (
     <Section title={`Layar ruangan: ${room.name}`}>
       <p className="muted" style={{ marginTop: 0 }}>
-        Pasang tablet atau HP di depan ruangan. Layar menampilkan status ruangan, jadwal hari ini, hitung mundur ke akhir atau awal booking, dan
-        daftar peserta. Layar tidak memakai akun siapa pun dan hanya bisa membaca jadwal ruangan ini.
+        Tablet atau TV di depan ruangan menampilkan status ruangan, jadwal hari ini, hitung mundur ke akhir atau awal booking, dan daftar peserta.
+        Layar tidak memakai akun siapa pun dan hanya bisa membaca jadwal ruangan ini.
       </p>
+      <ol className="small" style={{ marginTop: 0, paddingLeft: 18 }}>
+        <li>
+          Di tablet atau TV, buka <strong>{window.location.host}/layar</strong> (atau aplikasi Android Spaces → <strong>Pasang sebagai layar ruangan</strong>).
+          Layarnya menampilkan QR dan kode.
+        </li>
+        <li>
+          Pindai QR itu dengan kamera HP Anda (atau aplikasi Spaces → Akun → <strong>Hubungkan layar ruangan</strong>), lalu pilih ruangan ini. Tanpa kamera,
+          ketik kodenya di bawah.
+        </li>
+      </ol>
       <ErrorNote error={error} />
       {!room.active && <div className="notice warn">Ruangan ini nonaktif. Layarnya akan menampilkan "Tidak tersedia".</div>}
-
-      {created && (
-        <div className="notice">
-          <div className="spread">
-            <strong>Kode pemasangan untuk {created.display.name}</strong>
-            <button className="ghost sm" onClick={() => setCreated(null)}>Tutup</button>
-          </div>
-          <div className="pair-box">
-            <QrCode value={pairingUrl(window.location.origin, created.code)} label={`Kode QR pemasangan ${created.code}`} />
-            <div className="stack">
-              <div>
-                <div className="small muted">Kode</div>
-                <div className="disp-layar-code">{created.code}</div>
-              </div>
-              <ol className="small" style={{ margin: 0, paddingLeft: 18 }}>
-                <li>
-                  <strong>Pindai QR</strong> dengan kamera tablet atau HP yang akan dipasang. Peramban terbuka dan layar langsung terpasang.
-                </li>
-                <li>
-                  Di aplikasi Android Spaces: halaman masuk → <strong>Pasang sebagai layar ruangan</strong> → <strong>Pindai QR</strong>.
-                </li>
-                <li>
-                  Tanpa kamera: buka <strong>{window.location.host}/layar</strong> lalu ketik kodenya.
-                </li>
-              </ol>
-              <div className="small muted">
-                QR dan kode hanya ditampilkan sekali, berlaku sampai{" "}
-                {new Date(created.display.pairExpiresAt! * 1000).toLocaleTimeString("id-ID", { timeStyle: "short" })}, dan hanya untuk satu perangkat.
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {done && <div className="notice ok">{done}</div>}
 
       <div className="fields" style={{ marginBottom: 12 }}>
+        <div>
+          <label htmlFor="disp-code">Kode di layar</label>
+          <input
+            id="disp-code"
+            className="num"
+            autoComplete="off"
+            autoCapitalize="characters"
+            spellCheck={false}
+            maxLength={12}
+            placeholder="ABCD-2345"
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+          />
+        </div>
         <div>
           <label htmlFor="disp-name">Nama layar (opsional)</label>
           <input id="disp-name" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} placeholder={`Layar ${room.name}`} />
         </div>
         <button
           className="primary"
-          disabled={busy}
+          disabled={busy || !code.trim()}
           onClick={() =>
             run(async () => {
-              setCreated(await create());
+              const res = await connect(code);
+              setDone(`${res.display.name} terhubung. Layarnya berganti ke jadwal ${room.name} dalam beberapa detik.`);
+              setCode("");
               setName("");
               await load();
             })
           }
         >
-          Buat QR dan kode
+          Hubungkan
         </button>
         <button
           disabled={busy}
           title="Membuka mode layar di peramban ini"
           onClick={() =>
             run(async () => {
-              const res = await create();
-              await pairThisDevice(res.code);
+              const req = await requestDisplayCode(null);
+              await connect(req.code);
+              displayToken.set(req.token);
               navigate("/layar");
             })
           }
@@ -591,7 +640,7 @@ function RoomDisplays({ room }: { room: RoomDto }) {
             <div key={d.id} className="list-item">
               <span className="g">
                 <strong>{d.name}</strong>
-                <span className="small muted">Dibuat {fmtDateTime(d.createdAt)}</span>
+                <span className="small muted">Dihubungkan {fmtDateTime(d.pairedAt ?? d.createdAt)}</span>
               </span>
               {status(d)}
               {revoking === d.id ? (
@@ -603,7 +652,7 @@ function RoomDisplays({ room }: { room: RoomDto }) {
                       run(async () => {
                         await api("POST", `/rooms/displays/${d.id}/revoke`);
                         setRevoking(null);
-                        if (created?.display.id === d.id) setCreated(null);
+                        setDone(null);
                         await load();
                       })
                     }
@@ -613,7 +662,7 @@ function RoomDisplays({ room }: { room: RoomDto }) {
                   <button className="sm" onClick={() => setRevoking(null)}>Batal</button>
                 </>
               ) : (
-                <button className="sm" onClick={() => setRevoking(d.id)}>{d.pairedAt ? "Cabut" : "Batalkan kode"}</button>
+                <button className="sm" onClick={() => setRevoking(d.id)}>Cabut</button>
               )}
             </div>
           ))}
